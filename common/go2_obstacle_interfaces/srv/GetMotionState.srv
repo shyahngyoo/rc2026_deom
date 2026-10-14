@@ -1,0 +1,10 @@
+string obstacle_id
+---
+bool known
+string obstacle_id
+bool skill_active
+bool safe_stance
+bool control_releasable
+string error_code
+string message
+

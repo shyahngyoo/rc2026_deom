@@ -1,0 +1,23 @@
+backend_simulation:
+  ros__parameters:
+    simulation_mode: true
+    imu_in_base_xyz: [0.3, 0.1, 0.2]
+    imu_in_base_rpy: [0.0, 0.0, 0.25]
+    output_watchdog: 0.25
+    nav_timeout: 20.0
+robot_state_adapter:
+  ros__parameters:
+    imu_in_base_xyz: [0.3, 0.1, 0.2]
+    imu_in_base_rpy: [0.0, 0.0, 0.25]
+    velocity_mode: pose_derived
+mission_manager:
+  ros__parameters:
+    accepted_pose_topic: /localization/evidence
+    accepted_pose_type: evidence
+    accepted_pose_body_frame: livox_frame
+    mission_time_limit: 90.0
+    navigation_timeout: 12.0
+    approach_timeout: 8.0
+    localization_timeout: 5.0
+    simulation_mode: true
+    autostart: false

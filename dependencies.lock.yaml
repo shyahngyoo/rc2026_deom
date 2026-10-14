@@ -1,0 +1,21 @@
+# Source inputs are pinned; Ubuntu/ROS apt versions follow Jammy/Humble.
+format: 1
+ubuntu: "22.04"
+ros_distro: humble
+architectures: [amd64, arm64]
+source_manifest: dependencies.repos
+ros_apt_source:
+  version: "1.3.0"
+  url: https://github.com/ros-infrastructure/ros-apt-source/releases/download/1.3.0/ros2-apt-source_1.3.0.jammy_all.deb
+  upstream_instructions: https://github.com/ros2/ros2_documentation/blob/humble/source/Installation/_Apt-Repositories.rst
+build:
+  default_jobs: 2
+  executor: sequential
+  cuda: false
+patches:
+  livox_driver2_monotonic_clock.patch: a389cffe3b37b945270bfe643119249b84b3f3b6a2ca2f7d42494767cd5a0576
+  fast_lio_handheld.patch: a74c6df07fb9a9366e04c728fec6b8e06af2b48731625036c9ad208ac15ad474
+  fast_lio_timestamp_guard.patch: d60165da78a5ecca922ce02546fdf54a7d0b26758f8a686b80d7bd1853a1025a
+driver_message_headers:
+  implementation: tools/install_real.bash patch_driver_headers
+  description: Humble ROSIDL target dependency and explicit generated include path.

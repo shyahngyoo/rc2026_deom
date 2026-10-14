@@ -1,0 +1,33 @@
+robot_state_adapter:
+  ros__parameters:
+    source_topic: /Odometry
+    source_odom_frame: odom
+    source_imu_frame: livox_frame
+    # Separate branch: never replace odom->livox_frame or add an IMU parent.
+    nav_odom_frame: nav_odom
+    footprint_frame: base_footprint
+    base_frame: base_link
+    map_frame: map
+    odom_topic: /odom
+    status_topic: /robot_state/status
+    # T_base_imu: EXAMPLE identity, must be measured on the real robot.
+    imu_in_base_xyz: [0.0, 0.0, 0.0]
+    imu_in_base_rpy: [0.0, 0.0, 0.0]
+    # Navigation reference plane, not a calibrated physical ground height.
+    ground_z: 0.0
+    # FAST-LIO's default zero twist is not a measurement. Measured modes are
+    # child (both vectors in IMU) or world (both in source odom), with covariance.
+    velocity_mode: pose_derived
+    max_input_age: 0.5
+    future_tolerance: 0.05
+    input_wall_timeout: 0.5
+    watchdog_period: 0.05
+    unknown_covariance: 1000000.0
+    velocity_window: 0.3
+    velocity_min_span: 0.08
+    velocity_max_gap: 0.5
+    # Sanity bounds, not hardware command limits.
+    velocity_max_linear_speed: 5.0
+    velocity_max_angular_speed: 10.0
+    derived_linear_variance: 0.25
+    derived_angular_variance: 0.25

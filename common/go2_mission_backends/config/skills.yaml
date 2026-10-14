@@ -1,0 +1,15 @@
+# These are test executors; they are rejected unless simulation_mode=true.
+# Speeds are fixture inputs, not validated real-machine limits.
+skills:
+  test_walk:
+    executor: test
+    mode: success
+    duration: 0.6
+    velocity: [0.08, 0.0, 0.0]
+    execution_timeout: 3.0
+  test_wrong_exit:
+    executor: test
+    mode: wrong_exit
+    duration: 0.6
+    velocity: [0.0, 0.0, 0.0]
+    execution_timeout: 3.0

@@ -1,0 +1,7 @@
+<library path="go2_goal_critics">
+  <class name="go2_nav_bringup::RecoverableRotateToGoalCritic"
+         type="go2_nav_bringup::RecoverableRotateToGoalCritic"
+         base_class_type="dwb_core::TrajectoryCritic">
+    <description>Rotate near the goal, resume translation after XY drift.</description>
+  </class>
+</library>

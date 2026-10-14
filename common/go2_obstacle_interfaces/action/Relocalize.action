@@ -1,0 +1,10 @@
+# Autonomous map search; no target/end_pose or fabricated initial pose.
+string frame_id
+---
+bool localized
+string error_code
+string message
+---
+string phase
+float32 progress
+

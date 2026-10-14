@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>go2_nav_bringup</name>
+  <version>0.2.0</version>
+  <description>go2 nav bringup for the Go2 MID360 FAST-LIO Nav2 project.</description>
+  <maintainer email="icecream127@users.noreply.github.com">icecream127</maintainer>
+  <license>BSD-3-Clause</license>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>behaviortree_cpp_v3</depend>
+  <depend>rclcpp</depend>
+  <depend>tf2_ros</depend>
+  <depend>nav2_util</depend>
+  <depend>geometry_msgs</depend>
+  <depend>dwb_core</depend>
+  <depend>dwb_critics</depend>
+  <depend>pluginlib</depend>
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>action_msgs</exec_depend>
+  <exec_depend>lifecycle_msgs</exec_depend>
+  <exec_depend>nav2_msgs</exec_depend>
+  <exec_depend>go2_obstacle_interfaces</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>rclpy</exec_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>nav2_common</exec_depend>
+  <exec_depend>nav2_bringup</exec_depend>
+  <exec_depend>nav2_map_server</exec_depend>
+  <exec_depend>nav2_lifecycle_manager</exec_depend>
+  <exec_depend>rviz2</exec_depend>
+  <export><build_type>ament_cmake</build_type></export>
+</package>

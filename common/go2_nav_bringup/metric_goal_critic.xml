@@ -1,0 +1,7 @@
+<library path="go2_metric_goal_critic">
+  <class name="go2_nav_bringup::MetricGoalDistanceCritic"
+         type="go2_nav_bringup::MetricGoalDistanceCritic"
+         base_class_type="dwb_core::TrajectoryCritic">
+    <description>Continuous metric endpoint distance for precision approach.</description>
+  </class>
+</library>

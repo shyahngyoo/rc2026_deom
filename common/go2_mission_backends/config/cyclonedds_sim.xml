@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Local verification profile for the tested WSL/CycloneDDS setup.
+     Leave discovery/interface selection to ROS_LOCALHOST_ONLY; selecting lo
+     again here duplicates the interface added by rmw_cyclonedds_cpp.
+     Bound UDP messages below a 1500-byte path MTU without shrinking ROS clouds.
+     This file affects only processes that explicitly set CYCLONEDDS_URI. -->
+<CycloneDDS xmlns="https://cdds.io/config">
+  <Domain Id="any">
+    <General>
+      <MaxMessageSize>1200 B</MaxMessageSize>
+      <FragmentSize>1100 B</FragmentSize>
+    </General>
+    <Discovery>
+      <!-- The isolated Nav2 graph uses more than 10 independent processes. -->
+      <MaxAutoParticipantIndex>64</MaxAutoParticipantIndex>
+    </Discovery>
+  </Domain>
+</CycloneDDS>

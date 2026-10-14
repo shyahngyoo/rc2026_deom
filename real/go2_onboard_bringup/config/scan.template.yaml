@@ -1,0 +1,17 @@
+# DIAGNOSTIC projection only; height/range filters are not calibrated to a real robot.
+# Nav2's initial profile uses static-map costmaps, not this unvalidated scan as safety evidence.
+onboard_cloud_to_scan:
+  ros__parameters:
+    use_sim_time: false
+    target_frame: base_footprint
+    transform_tolerance: 0.1
+    min_height: -1.0
+    max_height: 2.0
+    angle_min: -3.141592653589793
+    angle_max: 3.141592653589793
+    angle_increment: 0.008726646259971648
+    scan_time: 0.1
+    range_min: 0.2
+    range_max: 30.0
+    use_inf: true
+    inf_epsilon: 1.0

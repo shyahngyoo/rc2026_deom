@@ -1,0 +1,14 @@
+# Arbiter must independently enforce stop, terminal Actions and safe support.
+# SAFE_HOLD invokes low-level support control, never merely cmd_vel=0.
+string owner
+string expected_owner
+string mission_id
+string request_id
+float64 lease_duration
+---
+bool accepted
+string owner
+string mission_id
+string request_id
+string message
+

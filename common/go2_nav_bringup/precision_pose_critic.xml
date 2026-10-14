@@ -1,0 +1,5 @@
+<library path="go2_precision_pose_critic">
+  <class name="go2_nav_bringup::PrecisionPoseCritic" type="go2_nav_bringup::PrecisionPoseCritic" base_class_type="dwb_core::TrajectoryCritic">
+    <description>Continuous holonomic position and yaw objective for precision approach.</description>
+  </class>
+</library>

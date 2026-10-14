@@ -1,0 +1,15 @@
+# The mission manager sends this only after nav_approach.xml succeeds.
+# Obstacle-specific geometry and gait settings are resolved by skill_id.
+string obstacle_id
+string skill_id
+---
+# Only completed && control_released permits a possible return to navigation.
+# The mission manager must also independently validate localization.
+bool completed
+bool control_released
+string message
+bool safe_stance
+string error_code
+---
+string phase
+float32 progress

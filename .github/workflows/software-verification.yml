@@ -1,0 +1,36 @@
+name: Software verification
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  software:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pinned real runtime
+        run: bash tools/install_real.bash --install-ros --workspace "$RUNNER_TEMP/rc2026_ws" --jobs 2
+      - name: Install verification dependencies
+        run: sudo apt-get install -y python3-pytest ros-humble-ament-cmake-pytest
+      - name: Backend regression and launch smoke
+        run: bash tools/verify_real.bash --workspace "$RUNNER_TEMP/rc2026_ws" --report-dir "$RUNNER_TEMP/reports/backend"
+      - name: Actual Nav2 isolation and live doctor
+        shell: bash
+        run: |
+          source /opt/ros/humble/setup.bash
+          source "$RUNNER_TEMP/rc2026_ws/install/local_setup.bash"
+          export PYTHONNOUSERSITE=1 RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+          export ROS_DOMAIN_ID=169 ROS_LOCALHOST_ONLY=1
+          export CYCLONEDDS_URI="file://$GITHUB_WORKSPACE/common/go2_mission_backends/config/cyclonedds_sim.xml"
+          python3 -m pytest -q real/go2_onboard_bringup/test/test_doctor_ros.py real/go2_onboard_bringup/test/test_planning_graph.py --junitxml="$RUNNER_TEMP/reports/onboard.xml"
+      - name: Upload software reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: software-reports
+          path: ${{ runner.temp }}/reports
+          if-no-files-found: warn

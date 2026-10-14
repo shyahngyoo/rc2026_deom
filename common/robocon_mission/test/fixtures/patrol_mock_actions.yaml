@@ -1,0 +1,224 @@
+# Simulation-only state-machine checks in the existing clear patrol corridors.
+# Mock Action does not move Gazebo or publish TF/odom: entry == exit by design.
+# Replace these end poses only when an actual displacement skill is connected.
+start_area: simulation_origin
+frame_id: map
+route:
+- id: west_entry
+  type: obstacle
+  transit_pose:
+  - -1.0
+  - 0.0
+  - -1.9513
+  approach_pose:
+  - -1.0
+  - 0.0
+  - -1.9513
+  skill_id: mock_state_only
+  end_pose:
+  - -1.0
+  - 0.0
+  - -1.9513
+  end_xy_tolerance: 0.15
+  end_yaw_tolerance: 0.2
+  verify_timeout: 8.0
+  skill_timeout: 10.0
+- id: southwest_entry
+  type: navigation
+  pose:
+  - -1.5
+  - -1.2
+  - 3.1416
+- id: southwest_column_north
+  type: navigation
+  pose:
+  - -5.8
+  - -1.2
+  - -1.5708
+- id: southwest_corner
+  type: navigation
+  pose:
+  - -5.8
+  - -4.8
+  - 0.0
+- id: south_west
+  type: obstacle
+  transit_pose:
+  - -1.0
+  - -4.8
+  - 0.0
+  approach_pose:
+  - -1.0
+  - -4.8
+  - 0.0
+  skill_id: mock_state_only
+  end_pose:
+  - -1.0
+  - -4.8
+  - 0.0
+  end_xy_tolerance: 0.15
+  end_yaw_tolerance: 0.2
+  verify_timeout: 8.0
+  skill_timeout: 10.0
+- id: south_east
+  type: navigation
+  pose:
+  - 2.5
+  - -4.8
+  - 0.0
+- id: southeast_corner
+  type: navigation
+  pose:
+  - 5.5
+  - -4.8
+  - 3.1416
+- id: south_east_return
+  type: navigation
+  pose:
+  - 2.5
+  - -4.8
+  - 3.1416
+- id: south_center_return
+  type: navigation
+  pose:
+  - 0.0
+  - -4.8
+  - 1.5708
+- id: center_south
+  type: navigation
+  pose:
+  - 0.0
+  - -1.2
+  - 1.5708
+- id: west_interior_entry
+  type: navigation
+  pose:
+  - 0.0
+  - 1.5
+  - 3.1416
+- id: west_box_east
+  type: navigation
+  pose:
+  - -3.3
+  - 1.5
+  - -1.5708
+- id: west_interior_south
+  type: navigation
+  pose:
+  - -3.3
+  - -0.7
+  - 0.0
+- id: center_west_return
+  type: navigation
+  pose:
+  - 0.0
+  - -0.7
+  - 1.5708
+- id: northwest_entry
+  type: navigation
+  pose:
+  - 0.0
+  - 3.8
+  - 3.1416
+- id: northwest_wall_north
+  type: navigation
+  pose:
+  - -5.8
+  - 3.8
+  - 1.5708
+- id: northwest_corner
+  type: navigation
+  pose:
+  - -5.8
+  - 4.9
+  - 0.0
+- id: north_center
+  type: obstacle
+  transit_pose:
+  - -1.0
+  - 4.9
+  - 0.0
+  approach_pose:
+  - -1.0
+  - 4.9
+  - 0.0
+  skill_id: mock_state_only
+  end_pose:
+  - -1.0
+  - 4.9
+  - 0.0
+  end_xy_tolerance: 0.15
+  end_yaw_tolerance: 0.2
+  verify_timeout: 8.0
+  skill_timeout: 10.0
+- id: north_east
+  type: navigation
+  pose:
+  - 3.0
+  - 4.9
+  - 0.0
+- id: northeast_corner
+  type: navigation
+  pose:
+  - 5.85
+  - 4.9
+  - -1.5708
+- id: east_corridor
+  type: navigation
+  pose:
+  - 5.85
+  - 1.2
+  - 3.1416
+- id: east_interior
+  type: navigation
+  pose:
+  - 2.7
+  - 1.2
+  - -1.5708
+- id: southeast_wall_northwest
+  type: navigation
+  pose:
+  - 2.7
+  - -1.1
+  - 0.0
+- id: southeast_wall_northeast
+  type: navigation
+  pose:
+  - 5.6
+  - -1.1
+  - 1.4625
+- id: east_corridor_return
+  type: navigation
+  pose:
+  - 5.85
+  - 1.2
+  - 3.1416
+- id: northeast_pillar_west
+  type: navigation
+  pose:
+  - 2.7
+  - 1.2
+  - 1.5708
+- id: north_return
+  type: navigation
+  pose:
+  - 2.7
+  - 4.9
+  - 3.1416
+- id: center_north_return
+  type: navigation
+  pose:
+  - 0.0
+  - 4.9
+  - -1.5708
+- id: center_return
+  type: navigation
+  pose:
+  - 0.0
+  - 1.2
+  - -1.5708
+return:
+  pose:
+  - 0.0
+  - 0.0
+  - 0.0

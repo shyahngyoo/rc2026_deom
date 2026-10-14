@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+build/
+install/
+log/
+.env
+.env.*
+!*.example
+*.pcd
+*.bag
+*.db3
+*.mcap
+local_config/
+robot_config/

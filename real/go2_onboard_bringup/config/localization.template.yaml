@@ -1,0 +1,13 @@
+localization_evidence_adapter:
+  ros__parameters:
+    input_topic: /gicp/evidence
+    output_topic: /localization/evidence
+    health_service: /mission/localization_ok
+    map_frame: map
+    body_frame: livox_frame
+    # Optional explicit process identity; otherwise pin the first observed source.
+    # Changing/restarting the source requires deliberately restarting this adapter.
+    source_id: ""
+    evidence_max_age: 4.0
+    clock_timeout: 1.0
+    future_tolerance: 0.1

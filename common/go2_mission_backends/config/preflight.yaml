@@ -1,0 +1,31 @@
+mission_preflight:
+  ros__parameters:
+    # Filled by the independent backend test launch.
+    route_file: ""
+    service_name: /mission/preflight
+    localization_ok_service: /mission/localization_ok
+    robot_state_topic: /robot_state/status
+    odom_topic: /odom
+    authority_topic: /motion/authority
+    motion_state_service: /motion/get_state
+    nav_action_name: /navigate_to_pose
+    skills_ready_service: /skills/ready
+    output_topic: /backend_sim/cmd_vel
+    expected_output_node: motion_arbiter
+    map_frame: map
+    base_frame: base_footprint
+    odom_frame: nav_odom
+    require_distinct_endpoints: true
+    minimum_exit_distance: 0.1
+    topic_max_age: 0.5
+    adapter_status_max_age: 0.5
+    tf_max_age: 0.5
+    rpc_timeout: 0.3
+    rpc_max_age: 0.5
+    poll_period: 0.1
+    future_tolerance: 0.05
+    # Empty array means no lifecycle assertion. Real profiles may explicitly
+    # list /controller_server,/planner_server,/bt_navigator,... and each must
+    # return lifecycle ACTIVE. This is not a validated real deployment profile.
+    # Humble CLI may encode [] as NOT_SET; the node normalizes it to [].
+    required_nav_nodes: []

@@ -1,0 +1,22 @@
+# Interface demonstration only; the mock skill does not move the robot.
+start_area: demo_start
+frame_id: map
+route:
+  - {id: waypoint_01, type: navigation, pose: [0.2, 0.0, 0.0]}
+  - id: obstacle_demo
+    type: obstacle
+    transit_pose: [0.3, 0.0, 0.0]
+    approach_pose: [0.4, 0.0, 0.0]
+    skill_id: simulated_obstacle
+    end_pose: [0.8, 0.0, 0.0]
+    end_xy_tolerance: 0.15
+    end_yaw_tolerance: 0.20
+    verify_timeout: 5.0
+    transit_timeout: 20.0
+    approach_timeout: 10.0
+    skill_timeout: 20.0
+    timeout: 20.0
+    max_retries: 1
+  - {id: waypoint_02, type: navigation, pose: [0.2, 0.0, 0.0]}
+return:
+  pose: [0.0, 0.0, 0.0]

@@ -1,0 +1,17 @@
+motion_arbiter:
+  ros__parameters:
+    # Verification-only limits, not measured machine-horse parameters.
+    simulation_mode: true
+    enable_output: true
+    nav_input: /motion/nav_command
+    skill_input: /motion/skill_command
+    output_topic: /backend_sim/cmd_vel
+    telemetry_topic: /motion/telemetry
+    state_timeout: 0.5
+    command_timeout: 0.5
+    max_command_age: 0.3
+    stable_duration: 0.15
+    stable_linear_velocity: 0.03
+    stable_angular_velocity: 0.05
+    max_linear_speed: 0.5
+    max_angular_speed: 1.0

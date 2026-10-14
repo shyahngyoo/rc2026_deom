@@ -1,0 +1,18 @@
+# ROS runtime dependencies only. Livox SDK is bootstrapped outside colcon.
+repositories:
+  Livox-SDK2:
+    type: git
+    url: https://github.com/Livox-SDK/Livox-SDK2.git
+    version: f5d9375f84efe2b15bc0a052d3e18482ed13adf4
+  livox_ros_driver2:
+    type: git
+    url: https://github.com/Livox-SDK/livox_ros_driver2.git
+    version: 13eb05e4e6dd7a765b934d0c5fd6236676a57b49
+  FAST_LIO:
+    type: git
+    url: https://github.com/XjuHurricaneQuadVision/FAST_LIO.git
+    version: 440a8e3e909023b7cb084e99b0c5070e3baebe86
+  fast_gicp:
+    type: git
+    url: https://github.com/koide3/fast_gicp.git
+    version: 0e7ec1441c99f7be453db2ea216d5de029387417

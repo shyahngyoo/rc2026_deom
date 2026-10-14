@@ -1,0 +1,51 @@
+mission_manager:
+  ros__parameters:
+    navigation_timeout: 120.0
+    approach_timeout: 90.0
+    skill_timeout: 20.0
+    server_timeout: 20.0
+    localization_timeout: 30.0
+    cancel_timeout: 8.0
+    stop_timeout: 8.0
+    max_navigation_retries: 1
+    odom_timeout: 0.5
+    tf_timeout: 0.5
+    clock_timeout: 1.0
+    localization_loss_grace: 1.0
+    stable_linear_velocity: 0.03
+    stable_angular_velocity: 0.05
+    stable_duration: 1.0
+    # Require a new measured stop interval at each waypoint and after returning.
+    wait_at_waypoints: true
+    # Transit -> precision approach -> measured stop -> original-goal pose acceptance.
+    precise_waypoints: true
+    waypoint_xy_tolerance: 0.10
+    waypoint_yaw_tolerance: 0.10
+    # Retry only a confirmed stopped pose mismatch, never stale data/unknown cancellation.
+    max_waypoint_alignment_retries: 1
+    nav_action_name: /navigate_to_pose
+    obstacle_action_name: /execute_obstacle
+    localization_ok_service: /mission/localization_ok
+    control_service: /motion/set_control_mode
+    control_state_topic: /motion/control_state
+    motion_state_service: /motion/get_state
+    relocalization_action_name: /localization/relocalize
+    base_frame: base_footprint
+    handoff_timeout: 5.0
+    skill_safe_timeout: 5.0
+    relocalize_timeout: 15.0
+    max_relocalization_retries: 1
+    health_timeout: 1.0
+    control_state_timeout: 0.5
+    control_lease_duration: 2.0
+    verify_stable_duration: 0.5
+    verify_max_sample_gap: 0.4
+    verify_minimum_samples: 3
+    # Set the actual accepted-pose topic in the simulation launch or real adapter.
+    accepted_pose_topic: ""
+    accepted_pose_max_age: 4.0
+    approach_xy_tolerance: 0.10
+    approach_yaw_tolerance: 0.10
+    mission_time_limit: 180.0
+    simulation_mode: false
+    autostart: false

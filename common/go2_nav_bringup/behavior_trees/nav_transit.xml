@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<root main_tree_to_execute="MainTree">
+
+  <BehaviorTree ID="MainTree">
+
+    <!--
+      整体导航恢复：
+      正常导航彻底失败后，最多执行 2 次系统级恢复。
+      障碍赛不使用 Spin / BackUp，避免台阶、坡道上危险动作。
+    -->
+    <RecoveryNode
+        name="ObstacleCourseRecovery"
+        number_of_retries="2">
+
+      <!-- ============================= -->
+      <!-- 正常导航                       -->
+      <!-- ============================= -->
+      <PipelineSequence name="ObstacleCourseNavigation">
+
+        <!--
+          全局规划：
+          保留 Humble 常见的 1 Hz 重规划。
+          固定赛道也可以后续降低到 0.5 Hz。
+        -->
+        <PauseReplanningNearGoal goal="{goal}" distance="0.25"
+            robot_base_frame="base_footprint">
+        <RateController hz="1.0">
+
+          <RecoveryNode
+              name="PlannerRecovery"
+              number_of_retries="1">
+
+            <!-- 正常规划 -->
+            <ComputePathToPose
+                goal="{goal}"
+                path="{path}"
+                planner_id="GridBased"/>
+
+            <!--
+              规划失败：
+              如果此时目标被更新，直接返回重新规划；
+              否则清除 global costmap 后再试一次。
+            -->
+            <ReactiveFallback name="PlannerRecoveryFallback">
+
+              <GoalUpdated/>
+
+              <ClearEntireCostmap
+                  name="ClearGlobalCostmap"
+                  service_name="global_costmap/clear_entirely_global_costmap"/>
+
+            </ReactiveFallback>
+
+          </RecoveryNode>
+
+        </RateController>
+        </PauseReplanningNearGoal>
+
+
+        <!-- ============================= -->
+        <!-- 局部控制 / 路径跟踪            -->
+        <!-- ============================= -->
+        <RecoveryNode
+            name="ControllerRecovery"
+            number_of_retries="1">
+
+          <FollowPath
+              path="{path}"
+              controller_id="FollowPath"
+              goal_checker_id="transit_goal_checker"/>
+
+          <!--
+            控制器失败：
+            只清 local costmap。
+            不旋转，不后退。
+          -->
+          <ReactiveFallback name="ControllerRecoveryFallback">
+
+            <GoalUpdated/>
+
+            <ClearEntireCostmap
+                name="ClearLocalCostmap"
+                service_name="local_costmap/clear_entirely_local_costmap"/>
+
+          </ReactiveFallback>
+
+        </RecoveryNode>
+
+      </PipelineSequence>
+
+
+      <!-- ============================= -->
+      <!-- 系统级恢复                     -->
+      <!-- ============================= -->
+      <ReactiveFallback name="SystemRecoveryFallback">
+
+        <!--
+          如果恢复过程中收到了新目标，
+          停止当前恢复并处理新目标。
+        -->
+        <GoalUpdated/>
+
+        <Sequence name="ObstacleCourseSystemRecovery">
+
+          <!-- 先清局部地图 -->
+          <ClearEntireCostmap
+              name="ClearLocalRecovery"
+              service_name="local_costmap/clear_entirely_local_costmap"/>
+
+          <!-- 再清全局地图 -->
+          <ClearEntireCostmap
+              name="ClearGlobalRecovery"
+              service_name="global_costmap/clear_entirely_global_costmap"/>
+
+          <!--
+            给传感器 / costmap 一点时间重新建立。
+            比官方默认 5 s 短很多。
+          -->
+          <Wait
+              name="ShortWaitRecovery"
+              wait_duration="1.0"/>
+
+        </Sequence>
+
+      </ReactiveFallback>
+
+    </RecoveryNode>
+
+  </BehaviorTree>
+
+</root>

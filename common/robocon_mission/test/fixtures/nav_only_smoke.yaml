@@ -1,0 +1,10 @@
+# Simulation smoke test only; this is not a competition route.
+start_area: gazebo_origin
+frame_id: map
+route:
+  - id: transit_smoke
+    type: navigation
+    pose: [0.6, 0.0, 0.0]
+    max_retries: 0
+return:
+  pose: [0.0, 0.0, 0.0]

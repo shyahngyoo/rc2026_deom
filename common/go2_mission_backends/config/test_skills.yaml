@@ -1,0 +1,14 @@
+# SIMULATION ONLY. Output commands are integrated by the independent plant.
+skills:
+  step_x:
+    executor: test
+    mode: success
+    duration: 1.0
+    velocity: [0.2, 0.0, 0.0]
+    execution_timeout: 5.0
+  step_y:
+    executor: test
+    mode: success
+    duration: 1.0
+    velocity: [0.2, 0.0, 0.0]
+    execution_timeout: 5.0
