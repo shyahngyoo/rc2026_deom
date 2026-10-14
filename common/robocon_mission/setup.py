@@ -10,7 +10,7 @@ setup(
     packages=find_packages(exclude=["test"]),
     data_files=[
         ("share/ament_index/resource_index/packages", ["resource/" + package_name]),
-        ("share/" + package_name, ["package.xml", "README.md"]),
+        ("share/" + package_name, ["package.xml", "README.md", "HURRICANE_PORT.md"]),
         ("share/" + package_name + "/launch", glob("launch/*.launch.py")),
         ("share/" + package_name + "/config", glob("config/*.yaml")),
         ("share/" + package_name + "/config", glob("config/*.xml")),
@@ -19,7 +19,7 @@ setup(
         ("share/" + package_name + "/docs", glob("docs/*.md")),
         ("share/" + package_name + "/docs/verification", glob("docs/verification/*.log")),
     ],
-    install_requires=["setuptools", "PyYAML"],
+    install_requires=["setuptools", "PyYAML", "pyserial"],
     zip_safe=True,
     maintainer="icecream127",
     maintainer_email="icecream127@users.noreply.github.com",
@@ -32,5 +32,9 @@ setup(
         "localization_health = robocon_mission.localization_health:main",
         "mock_motion_services = robocon_mission.mock_motion_services:main",
         "mock_mission_demo = robocon_mission.mock_mission_demo:main",
+        "hurricane_skill_server = robocon_mission.hurricane_server:main",
+        "hurricane_capture = robocon_mission.hurricane_capture:main",
+        "capture_panel = robocon_mission.hurricane_capture:panel_main",
+        "hurricane_preview = robocon_mission.hurricane_preview:main",
     ]},
 )

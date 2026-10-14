@@ -94,6 +94,10 @@ ros2 topic echo /mission/startup_status
 
 `/mission/start` 的调用形式为 `ros2 service call /mission/start std_srvs/srv/Trigger '{}'`。配置 `startup_check_service` 后，手动调用也不能绕过预检查；空字符串是兼容行为，不应作为实机启动策略。自动启动只在等待上限内重试，失败原因发布至 `/mission/startup_status`。预检查通过后，运行中的定位、停稳、所有权和安全站姿监督继续由既有流程处理。
 
-## 验证边界
+## Hurricane 障碍适配
+
+新增 Hurricane Unitree 指令编码、八类障碍技能模板、非阻塞 `/execute_obstacle` 服务和现场采点工具。使用方法与反馈契约见 [Hurricane 移植说明](HURRICANE_PORT.md)。默认 dry-run，模板需现场标定；本任务包保留现有 FSM、控制交接、独立运动状态、定位与出口验收流程。
+
+## 验证范围
 
 核心测试位于 [test](test)，后端集成测试位于 [go2_mission_backends/test](../go2_mission_backends/test)。当前证据与命令以[根验证记录](../../docs/VALIDATION.md)为准。模拟成功仅证明软件状态和消息契约，不能证明真实技能、机械支撑、赛场落点或整场实机自动化已完成。任务状态机不负责足端接触判分，规则验证接口见 [rule_validation.py](robocon_mission/rule_validation.py)。

@@ -1,0 +1,60 @@
+# Reference geometry from hurricane/map_zones_config.json, not current ROS map.
+# Do NOT copy source_reference into samples. Capture every sample on the field.
+version: 1
+frame_id: map
+pose_units: {position: metres, yaw: radians}
+calibrated: false
+samples: {}
+instructions:
+  - start and finish are distinct map markers defining the field +X axis.
+  - finish is the axis endpoint, not a navigation destination.
+  - Record all eight begin/entry/exit poses from fresh map-to-robot TF.
+  - begin is the source skill origin; entry is the safe approach pose; exit is the acceptance pose.
+  - Export refuses incomplete calibration; source reference coordinates remain uncalibrated.
+source_reference:
+  calibrated: false
+  frame_id: hurricane_reflected_y
+  source_file: ros2_to_stm32/map_zones_config.json
+  coordinate_convention: hurricane_reflected_y
+  note: Source field axis is established by two markers. Source y and handler yaw are reflected against ROS.
+  zones:
+    bridge_a:
+      name: 木桥A
+      handler: handle_bridge_A
+      begin: [3.42, 0.0]
+      bounds: {x_min: 3.42, x_max: 5.42, y_min: -4.9, y_max: 0.6}
+    bridge_b:
+      name: 木桥B
+      handler: handle_bridge_B
+      begin: [3.42, -4.130000000000001]
+      bounds: {x_min: 1.72, x_max: 3.42, y_min: -4.530000000000001, y_max: -3.5300000000000007}
+    big_slope:
+      name: 大斜坡
+      handler: handle_big_slope
+      begin: [1.0499999999999998, -3.980000000000001]
+      bounds: {x_min: -2.1500000000000004, x_max: 1.72, y_min: -4.580000000000001, y_max: -2.380000000000001}
+    limit_pole:
+      name: 限高栏
+      handler: handle_limit_pole
+      begin: [-2.95, -3.980000000000001]
+      bounds: {x_min: -4.84, x_max: -2.1500000000000004, y_min: -5.580000000000001, y_max: -1.3800000000000008}
+    bunker:
+      name: 沙坑
+      handler: handle_bunker
+      begin: [-5.34, -3.94]
+      bounds: {x_min: -8.34, x_max: -4.84, y_min: -4.9399999999999995, y_max: -2.1399999999999997}
+    pole:
+      name: 绕杆
+      handler: handle_pole
+      begin: [-6.995, -1.175]
+      bounds: {x_min: -8.34, x_max: -3.9799999999999995, y_min: -2.1399999999999997, y_max: 2.0}
+    high_wall:
+      name: 高墙
+      handler: handle_hill_wall
+      begin: [-2.28, -0.06]
+      bounds: {x_min: -3.9799999999999995, x_max: -2.1799999999999997, y_min: -1.0, y_max: 1.0}
+    step:
+      name: 台阶
+      handler: handle_step
+      begin: [0.0, 0.0]
+      bounds: {x_min: -2.1799999999999997, x_max: 1.4, y_min: -1.0, y_max: 1.0}
