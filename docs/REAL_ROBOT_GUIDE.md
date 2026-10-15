@@ -36,7 +36,7 @@ uname -m
 sudo apt-get update
 sudo apt-get install -y git
 cd "$HOME"
-git clone https://github.com/shyahngyoo/rc2026_deom.git
+git clone --branch rely-only --single-branch https://github.com/shyahngyoo/rc2026_deom.git
 cd "$HOME/rc2026_deom"
 bash tools/install_real.bash --jobs 2
 ```
@@ -57,11 +57,14 @@ bash tools/install_real.bash --install-ros --jobs 2
 ```bash
 cd "$HOME/rc2026_deom"
 git status --short
+git branch --show-current
+git fetch origin rely-only
+git switch rely-only
 git pull --ff-only
 bash tools/install_real.bash --jobs 2
 ```
 
-若存在自己的修改、版本冲突或依赖指纹报错，保留修改并查排错表；不要用 `reset --hard` 或删除工作空间来覆盖现场配置。
+确认工作分支为 `rely-only` 再运行安装器；切换分支前先保存自己的修改。若存在自己的修改、版本冲突或依赖指纹报错，保留修改并查排错表；不要用 `reset --hard` 或删除工作空间来覆盖现场配置。
 
 ## 2. 每个操作终端先加载同一套环境
 
@@ -502,7 +505,7 @@ Hurricane 默认 `dry_run:=true`。仅当已确认底层采用本仓库的 Hurri
 
 接入完成后的现场顺序应为：底层与急停可用 → 唯一仲裁器及真实状态 → 雷达/定位 → 生产 Nav2 命令适配 → 已标定的真实技能服务 → preflight 成功 → Mission 手动启动。先逐项完成“普通点、单个技能、单障碍完整链”验收，再自动整场。
 
-实机 Mission 必须显式使用 `simulation_mode:=false`、`use_sim_time:=false`、`start_mock_servers:=false`。连接本仓库 `/localization/evidence` 时还必须使用 **`accepted_pose_type:=evidence`**；默认 `covariance` 不能读取这个消息类型。不得省略实机 preflight 服务来绕过启动检查。
+实机 Mission 必须显式使用 `simulation_mode:=false`、`use_sim_time:=false`、`autostart:=false`。连接本仓库 `/localization/evidence` 时还必须使用 **`accepted_pose_type:=evidence`**；默认 `covariance` 不能读取这个消息类型。不得省略实机 preflight 服务来绕过启动检查。
 
 **本仓库尚未提供包含这些生产接口的一键全场 bringup。** 因此本指南不把独立启动 `mission_manager` 或把 `autostart` 改成 true 当作已经能实机跑赛。完整接口接通后，`/mission/start` 的标准调用为：
 

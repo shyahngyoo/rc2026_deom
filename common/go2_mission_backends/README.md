@@ -59,3 +59,5 @@ GICP 原子发布一次匹配的测量时间、source、epoch、sequence、accep
 
 固定地图初猜沿用真实 GICP，尚未提供全局候选搜索式重定位。实际 Nav2 Twist 到带 generation/session 的控制输入、真实 MotionTelemetry 和技能 executor 是后续实机接入工作；当前软件验证不代表真实运动或定位精度验收。
 
+
+`rely-only` 保留 `simulation_backend` 与 `backend_simulation.launch.py`，供独立的软件安全回归使用；它们不被机载 real.launch 或正式 mission.launch 包含。测试后端的 `simulation_mode` 防护和 `/backend_sim/cmd_vel` 隔离输出保持不变，不能用测试状态替代 STM32 真实反馈。

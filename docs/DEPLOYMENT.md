@@ -67,3 +67,5 @@ bash tools/verify_real.bash --workspace "$HOME/rc2026_ws" --report-dir "$HOME/rc
 ## 长期运行
 
 先用终端分阶段跑通、检查日志与真实数据，完成实际控制接口验收后再做无人值守服务。当前不安装自动开机行走服务。运行时配置和地图独立于 git；更新源码前备份 `~/.config/rc2026` 和实际地图，再重跑安装/回归。
+
+从旧分支升级到 `rely-only` 时，旧 `build/install` 可能残留已撤销的 Mock 程序或兼容 Launch。建议使用 `tools/install_real.bash --workspace "$HOME/rc2026_rely_only_ws"` 安装到新的专用工作空间，并同步修改各终端的 source 路径；不要混用旧安装。依赖判断、测试夹具保留与验证结果见[清理报告](RELY_ONLY_CLEANUP_REPORT.md)。

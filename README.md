@@ -1,5 +1,7 @@
 # RC2026 机器马机载导航与 Mission 后端
 
+当前 `rely-only` 分支面向团队自制四足机器狗：STM32 经 USB 串口连接 ROS 2 上位机，不使用 Go2 官方运动 SDK。本次只清理 Mock 与废弃入口，没有开发 STM32 驱动或开启运动输出。变更与验证见 [清理报告](docs/RELY_ONLY_CLEANUP_REPORT.md)。
+
 面向 **Ubuntu 22.04 / ROS 2 Humble、MID-360 自带 IMU、支持 `/cmd_vel` 与横移的机器马**。
 
 ## 从这里开始实机操作
@@ -14,7 +16,7 @@
 sudo apt-get update
 sudo apt-get install -y git
 cd "$HOME"
-git clone https://github.com/shyahngyoo/rc2026_deom.git
+git clone --branch rely-only --single-branch https://github.com/shyahngyoo/rc2026_deom.git
 cd "$HOME/rc2026_deom"
 bash tools/install_real.bash --jobs 2
 ```

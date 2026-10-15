@@ -28,10 +28,7 @@ setup(
     tests_require=["pytest"],
     entry_points={"console_scripts": [
         "mission_manager = robocon_mission.mission_manager:main",
-        "mock_localization_ok = robocon_mission.mock_localization_ok:main",
         "localization_health = robocon_mission.localization_health:main",
-        "mock_motion_services = robocon_mission.mock_motion_services:main",
-        "mock_mission_demo = robocon_mission.mock_mission_demo:main",
         "hurricane_skill_server = robocon_mission.hurricane_server:main",
         "hurricane_capture = robocon_mission.hurricane_capture:main",
         "capture_panel = robocon_mission.hurricane_capture:panel_main",

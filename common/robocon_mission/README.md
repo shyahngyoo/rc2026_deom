@@ -83,7 +83,7 @@ source ~/rc2026_ws/install/setup.bash
 ros2 launch robocon_mission mission.launch.py --show-args
 ```
 
-`mission.launch.py` 只组合 Mission 及显式选用的测试服务，不能完成实机底层接入。它的 `use_sim_time` 默认 `true`，实机集成时必须显式改为 `false`。当前应使用根 README 的机载入口，不启用 Mission 运动流程。
+`mission.launch.py` 只启动真实 MissionManager，不再注册或启动 Mock 节点；`use_sim_time=false`、`simulation_mode=false`、`autostart=false` 为安全默认。路线、原子定位证据、预检查服务与任务时限参数继续保留。它不提供底层状态或运动驱动，当前应使用根 README 的机载定位/规划诊断入口。
 
 已启动的软件测试环境可读取：
 
@@ -101,3 +101,7 @@ ros2 topic echo /mission/startup_status
 ## 验证范围
 
 核心测试位于 [test](test)，后端集成测试位于 [go2_mission_backends/test](../go2_mission_backends/test)。当前证据与命令以[根验证记录](../../docs/VALIDATION.md)为准。模拟成功仅证明软件状态和消息契约，不能证明真实技能、机械支撑、赛场落点或整场实机自动化已完成。任务状态机不负责足端接触判分，规则验证接口见 [rule_validation.py](robocon_mission/rule_validation.py)。
+
+## rely-only 清理说明
+
+旧 Mock 运行注册、无使用方的兼容 launch 与演示配置已移除。集成测试需要的两个 Mock 已迁到 `test/fixtures`，不作为 ROS 可执行程序安装。仲裁、定位、预检查和故障回归仍使用显式软件测试后端；它不在实机启动链中。检查清单与结果见 [清理报告](../../docs/RELY_ONLY_CLEANUP_REPORT.md)。

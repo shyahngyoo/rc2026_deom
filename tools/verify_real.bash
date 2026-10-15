@@ -102,7 +102,7 @@ print(json.dumps(dict(workspace_install=str(root),packages={k:str(v) for k,v in 
                      python_no_user_site=os.environ.get("PYTHONNOUSERSITE")),indent=2))
 PY
 cd -- "$verify_repo"
-verify_extra=(--ignore=common/robocon_mission/test/test_simulation_launch.py)
+verify_extra=()
 if ((!verify_wall)); then
   verify_extra+=(--deselect='common/go2_mission_backends/test/test_backend_mission.py::test_mission_two_distinct_obstacles_and_return[wall_clock]')
 fi

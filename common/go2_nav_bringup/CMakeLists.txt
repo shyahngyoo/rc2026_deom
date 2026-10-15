@@ -34,8 +34,6 @@ ament_export_libraries(pause_replanning_near_goal_bt_node)
 install(DIRECTORY launch config maps rviz behavior_trees DESTINATION share/${PROJECT_NAME} PATTERN "__pycache__" EXCLUDE)
 install(PROGRAMS scripts/nav_action_probe.py DESTINATION lib/${PROJECT_NAME}
   RENAME nav_action_probe)
-install(PROGRAMS scripts/mock_obstacle_skill.py DESTINATION lib/${PROJECT_NAME}
-  RENAME mock_obstacle_skill)
 install(PROGRAMS scripts/mission_handoff_example.py DESTINATION lib/${PROJECT_NAME}
   RENAME mission_handoff_example)
 install(FILES NAV2_BT.md DESTINATION share/${PROJECT_NAME})

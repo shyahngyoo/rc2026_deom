@@ -1,5 +1,7 @@
 # 发布前软件验证，2026-10-14
 
+此页记录 2026-10-14 发布前的软件验证。`rely-only` 清理后的测试迁移及新结果见 [RELY_ONLY_CLEANUP_REPORT.md](RELY_ONLY_CLEANUP_REPORT.md)；当前验证脚本已不再忽略历史 launch 测试文件。
+
 ## 实际执行结果
 
 | 检查 | 结果 | 范围 |

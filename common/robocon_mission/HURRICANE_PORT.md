@@ -38,7 +38,7 @@ PYTHONPATH=$PWD python3 -m robocon_mission.hurricane_preview --skill bridge_a
 ros2 launch robocon_mission hurricane.launch.py dry_run:=true
 ```
 
-它仅提供技能服务器，要求已有新鲜 `map→base_footprint` TF；不启动 Nav2、雷达或机器人。dry-run 的 Action 结果带 `error_code=DRY_RUN`、`safe_stance=false`，不能作为硬件任务完成证据。禁止同时启动 mock_obstacle_skill 或另一个 `/execute_obstacle` 服务器。
+它仅提供技能服务器，要求已有新鲜 `map→base_footprint` TF；不启动 Nav2、雷达或机器人。dry-run 的 Action 结果带 `error_code=DRY_RUN`、`safe_stance=false`，不能作为硬件任务完成证据。`/execute_obstacle` 必须只有一个实际技能服务器，不并行启动另一套 Action 服务。
 
 ## 现场采点与路线导出
 

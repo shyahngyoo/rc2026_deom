@@ -7,6 +7,6 @@
 - `pcd_to_nav2_map`：按高度将 PCD 投影为二维栅格，只是地图初稿，需检查实际可行驶区域。
 - `check_stationary`：辅助观测位姿静止，不提供真实安全支撑判据。
 
-旧 Python `pcd_icp_localizer`、`fast_lio_odom_bridge` 和兼容 launch 保留用于开发兼容；新的机载入口不启动它们。不要与原生 GICP/robot_state_adapter 同时启动造成重复 `map→odom`、`/odom` 或机体 TF。
+Python `pcd_icp_localizer`、`fast_lio_odom_bridge` 与有效的 `icp.launch.py` 保留供算法检查，新的机载入口不启动它们。没有真实使用方的旧兼容 launch 已移除；实机使用 `go2_real_bringup` 的雷达/里程计入口。不要与原生 GICP/robot_state_adapter 同时启动造成重复 `map→odom`、`/odom` 或机体 TF。
 
 实际配置由 `configure_robot` 生成到 `~/.config/rc2026`。工具命令及地图原点处理见 [DEPLOYMENT.md](../../docs/DEPLOYMENT.md)。定位 RMSE 和固定 covariance 都不能单独证明真实位置精度。

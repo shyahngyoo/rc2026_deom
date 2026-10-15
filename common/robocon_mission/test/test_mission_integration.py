@@ -13,7 +13,6 @@ from pathlib import Path
 
 import pytest
 import rclpy
-from ament_index_python.packages import get_package_prefix
 from go2_obstacle_interfaces.action import ExecuteObstacle
 from geometry_msgs.msg import TransformStamped, PoseWithCovarianceStamped
 from nav2_msgs.action import NavigateToPose
@@ -30,7 +29,13 @@ from tf2_ros import TransformBroadcaster
 
 from robocon_mission.mission_fsm import State
 from robocon_mission.mission_manager import MissionManager
-from robocon_mission.mock_motion_services import MockMotionServices
+# Safety test doubles live only in source fixtures, never installed ROS programs.
+FIXTURE_DIRECTORY = Path(__file__).resolve().parent / "fixtures"
+_fixture_spec = importlib.util.spec_from_file_location(
+    "mission_test_motion_services", FIXTURE_DIRECTORY / "mock_motion_services.py")
+_fixture_module = importlib.util.module_from_spec(_fixture_spec)
+_fixture_spec.loader.exec_module(_fixture_module)
+MockMotionServices = _fixture_module.MockMotionServices
 
 
 ROUTE = """start_area: demo
@@ -349,8 +354,7 @@ def _run_scenario_inner(tmp_path, skill_mode="success", nav_mode="success",
     mock_process = None
     mock_log = None
     if existing_mock:
-        executable = (Path(get_package_prefix("go2_nav_bringup")) / "lib" /
-                      "go2_nav_bringup" / "mock_obstacle_skill")
+        executable = FIXTURE_DIRECTORY / "mock_obstacle_skill.py"
         args = [str(executable), "--duration", "0.1"]
         if skill_mode == "fail":
             args.append("--fail")
@@ -406,8 +410,7 @@ def _run_scenario_inner(tmp_path, skill_mode="success", nav_mode="success",
     control_executor.add_node(fake.control_node)
     mock_node = None
     if inprocess_mock:
-        executable = (Path(get_package_prefix("go2_nav_bringup")) / "lib" /
-                      "go2_nav_bringup" / "mock_obstacle_skill")
+        executable = FIXTURE_DIRECTORY / "mock_obstacle_skill.py"
         loader = importlib.machinery.SourceFileLoader("tested_mock_skill", str(executable))
         spec = importlib.util.spec_from_loader(loader.name, loader)
         module = importlib.util.module_from_spec(spec)
