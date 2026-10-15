@@ -93,6 +93,7 @@ ros2 launch robocon_mission mission.launch.py \
   simulation_mode:=false use_sim_time:=false autostart:=false \
   startup_check_service:=/你的实机预检查服务 \
   accepted_pose_topic:=/你的真实定位证据话题 \
+  accepted_pose_type:=evidence \
   accepted_pose_body_frame:=你的定位安装体坐标系 \
   accepted_pose_source_id:=你的定位证据来源
 ros2 service call /mission/start std_srvs/srv/Trigger '{}'

@@ -1,5 +1,7 @@
 # 机载部署与建图
 
+首次实机操作请先按[实机操作指南](REAL_ROBOT_GUIDE.md)逐步执行；日常使用查[现场操作卡](REAL_ROBOT_QUICK_REFERENCE.md)，错误按[实机排错表](TROUBLESHOOTING.md)处理。本文保留参数与部署补充。
+
 环境是原生 Ubuntu 22.04 / ROS 2 Humble。默认 workspace 为 `~/rc2026_ws`，源码为 `~/rc2026_deom`；可用安装器参数改变前者。安装脚本在子进程中清除继承 overlay，不依赖原工程。部署终端设置 `export PYTHONNOUSERSITE=1`，避免 `~/.local` 的旧 pip 包覆盖 Ubuntu / ROS 使用的 NumPy、SciPy 等系统包；它不删除用户库。
 
 ## 先检查网络、时钟和数据
