@@ -1,0 +1,41 @@
+{
+  "protocol_version": 1,
+  "byte_order": "little",
+  "crc": "CRC-32/ISO-HDLC",
+  "vectors": [
+    {
+      "kind": 1,
+      "sequence": 1,
+      "session": 72623859790382856,
+      "payload": {
+        "protocol_version": 1
+      },
+      "hex": "a55a010116000100000008070605040302017b2270726f746f636f6c5f76657273696f6e223a317d36d63165"
+    },
+    {
+      "kind": 3,
+      "sequence": 2,
+      "session": 72623859790382856,
+      "payload": {
+        "forward": 0.25,
+        "turn": -0.5,
+        "owner": "NAVIGATION",
+        "mission_id": "test",
+        "generation": 3,
+        "valid_for_ms": 200
+      },
+      "hex": "a55a010367000200000008070605040302017b22666f7277617264223a302e32352c2267656e65726174696f6e223a332c226d697373696f6e5f6964223a2274657374222c226f776e6572223a224e415649474154494f4e222c227475726e223a2d302e352c2276616c69645f666f725f6d73223a3230307dee498134"
+    },
+    {
+      "kind": 128,
+      "sequence": 3,
+      "session": 72623859790382856,
+      "payload": {
+        "acked_sequence": 2,
+        "acked_type": 3,
+        "accepted": true
+      },
+      "hex": "a55a018033000300000008070605040302017b226163636570746564223a747275652c2261636b65645f73657175656e6365223a322c2261636b65645f74797065223a337d43d214cb"
+    }
+  ]
+}

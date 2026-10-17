@@ -10,8 +10,8 @@
 
 namespace go2_nav_bringup
 {
-// A quadruped can correct body X/Y while aligning yaw. A continuous velocity
-// objective avoids alternating incompatible pure-translation/pure-spin phases.
+// Optional body X/Y correction for holonomic platforms; the explicit
+// nonholonomic mode steers toward positional targets before final heading.
 class PrecisionPoseCritic : public dwb_core::TrajectoryCritic
 {
 public:
@@ -28,6 +28,11 @@ public:
       }
       return value;
     };
+    const auto holonomic_name = dwb_plugin_name_ + "." + name_ + ".holonomic";
+    nav2_util::declare_parameter_if_not_declared(node, holonomic_name,
+      rclcpp::ParameterValue(true));
+    holonomic_ = node->get_parameter(holonomic_name).as_bool();
+    position_tolerance_ = parameter("position_tolerance", 0.05);
     xy_gain_ = parameter("xy_gain", 0.7);
     yaw_gain_ = parameter("yaw_gain", 0.8);
     max_xy_ = parameter("max_xy_speed", 0.12);
@@ -72,6 +77,24 @@ public:
     const double error = std::atan2(std::sin(goal.theta-pose.theta),
       std::cos(goal.theta-pose.theta));
     desired_yaw_ = std::clamp(yaw_gain_*error, -max_yaw_, max_yaw_);
+    if (!holonomic_) {
+      // A lateral velocity objective stalls a nonholonomic robot beside its
+      // goal. Steer toward the positional target first, then align final yaw.
+      desired_y_ = 0.0;
+      if (std::hypot(goal.x-pose.x, goal.y-pose.y) > position_tolerance_) {
+        double bearing = std::atan2(target.y-pose.y, target.x-pose.x)-pose.theta;
+        bearing = std::atan2(std::sin(bearing), std::cos(bearing));
+        double direction = 1.0;
+        if (std::abs(bearing) > M_PI/2.0) {
+          direction = -1.0;
+          bearing = std::atan2(std::sin(bearing+M_PI), std::cos(bearing+M_PI));
+        }
+        desired_x_ = direction*std::min(speed, max_xy_)*std::max(0.0, std::cos(bearing));
+        desired_yaw_ = std::clamp(yaw_gain_*bearing, -max_yaw_, max_yaw_);
+      } else {
+        desired_x_ = 0.0;
+      }
+    }
     return true;
   }
 
@@ -85,6 +108,8 @@ public:
       angular_weight_*std::pow(v.theta-desired_yaw_, 2);
   }
 private:
+  bool holonomic_{true};
+  double position_tolerance_{0.05};
   double xy_gain_, yaw_gain_, max_xy_, max_yaw_, angular_weight_, direct_radius_, lookahead_;
   double desired_x_{0.0}, desired_y_{0.0}, desired_yaw_{0.0};
 };

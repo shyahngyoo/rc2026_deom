@@ -1,5 +1,8 @@
 # 机载入口与配置接口
 
+> STM32 接入更新：自制机器人不支持横移。新增单串口网关默认禁用运动；Hurricane 实机改走共享网关。协议为待固件实现草案，见 [STM32 接入指南](../../docs/STM32_BRIDGE_GUIDE.md)。下文原有定位/规划诊断入口继续保留。
+
+
 首次实机部署按[实机操作指南](../../docs/REAL_ROBOT_GUIDE.md)执行；已经配置完成时查[现场操作卡](../../docs/REAL_ROBOT_QUICK_REFERENCE.md)，失败时查[实机排错表](../../docs/TROUBLESHOOTING.md)。
 
 此包组合真实传感器、FAST-LIO、GICP、机体状态适配和诊断。实机 `use_sim_time=false`，不自动启动 RViz、Mission、电机输出或 Hurricane 技能服务器。

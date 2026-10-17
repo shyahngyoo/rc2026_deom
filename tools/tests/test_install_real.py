@@ -12,7 +12,7 @@ REPO=Path(__file__).resolve().parents[2]
 SCRIPT=REPO/'tools/install_real.bash'
 REL=('common/go2_obstacle_interfaces','common/go2_fastlio_localization','common/go2_nav_bringup',
  'common/robocon_mission','common/go2_mission_backends','real/go2_real_localization',
- 'real/go2_real_bringup','real/go2_onboard_bringup')
+ 'real/go2_real_bringup','real/quadruped_stm32_bridge','real/go2_onboard_bringup')
 PATCHES=('livox_driver2_monotonic_clock.patch','fast_lio_handheld.patch','fast_lio_timestamp_guard.patch')
 
 

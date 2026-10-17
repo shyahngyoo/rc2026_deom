@@ -68,7 +68,7 @@ export ROS_DOMAIN_ID="$verify_domain" ROS_LOCALHOST_ONLY=1 RMW_IMPLEMENTATION=rm
 export RC2026_CLI_DOMAIN_ID="$((verify_domain+1))"
 export RC2026_REPORT_DIR="$verify_report/backend_cases" ROBOCON_REQUIRE_ROS_IPC=1
 export CYCLONEDDS_URI="file://$verify_repo/common/go2_mission_backends/config/cyclonedds_sim.xml"
-verify_packages=(go2_obstacle_interfaces go2_nav_bringup robocon_mission go2_mission_backends go2_real_localization go2_onboard_bringup)
+verify_packages=(go2_obstacle_interfaces go2_nav_bringup robocon_mission go2_mission_backends go2_real_localization quadruped_stm32_bridge go2_onboard_bringup)
 if ((verify_build)); then
   cd -- "$verify_ws"
   colcon build --executor sequential --base-paths "$verify_repo" --packages-select "${verify_packages[@]}" \
@@ -86,7 +86,7 @@ from ament_index_python.packages import get_package_prefix
 import rclpy, numpy, scipy, yaml
 root=Path(os.environ["RC2026_VERIFY_INSTALL"]).resolve()
 names=("go2_obstacle_interfaces","go2_nav_bringup","robocon_mission",
-       "go2_mission_backends","go2_real_localization","go2_onboard_bringup","fast_gicp")
+       "go2_mission_backends","go2_real_localization","go2_onboard_bringup","quadruped_stm32_bridge","fast_gicp")
 prefixes={name:Path(get_package_prefix(name)).resolve() for name in names}
 for name,prefix in prefixes.items():
     assert prefix==root or root in prefix.parents, \
@@ -107,7 +107,7 @@ if ((!verify_wall)); then
   verify_extra+=(--deselect='common/go2_mission_backends/test/test_backend_mission.py::test_mission_two_distinct_obstacles_and_return[wall_clock]')
 fi
 /usr/bin/python3 -m pytest -q common/go2_mission_backends/test common/robocon_mission/test \
-  real/go2_onboard_bringup/test/test_profile.py tools/tests \
+  real/go2_onboard_bringup/test/test_profile.py real/quadruped_stm32_bridge/test tools/tests \
   "${verify_extra[@]}" --junitxml="$verify_report/tests.xml" 2>&1 | tee "$verify_report/tests.log"
 verify_nav_build="$verify_ws/build/go2_nav_bringup"
 [[ -f "$verify_nav_build/CTestTestfile.cmake" ]] ||

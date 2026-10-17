@@ -1,0 +1,56 @@
+# DRAFT PROTOCOL ONLY. Defaults open no port and cannot enable movement.
+serial_gateway:
+  ros__parameters:
+    use_sim_time: false
+    port: ''
+    baudrate: 115200
+    read_timeout: 0.02
+    write_timeout: 0.05
+    reconnect_interval: 1.0
+    max_reconnect_attempts: 5
+    handshake_timeout: 2.0
+    status_timeout: 0.3
+    authority_timeout: 0.3
+    command_timeout: 0.2
+    ack_timeout: 0.15
+    max_ack_retries: 2
+    enable_motion: false
+    test_mode: true
+    calibration_confirmed: false
+    # EXAMPLES ONLY: physical m/s and rad/s corresponding to normalized 1.0.
+    vx_full_scale: 0.5
+    wz_full_scale: 1.0
+    max_linear_speed: 0.5
+    max_angular_speed: 1.0
+    status_publish_frequency: 20.0
+    arbiter_output_topic: /stm32/arbiter_command
+    authority_topic: /motion/authority
+    navigation_status_topic: /navigate_to_pose/_action/status
+    expected_arbiter_node: motion_arbiter
+    base_frame: base_footprint
+nav_velocity_adapter:
+  ros__parameters:
+    use_sim_time: false
+    input_topic: /onboard/nav_cmd_raw
+    output_topic: /motion/nav_command
+    authority_topic: /motion/authority
+    base_frame: base_footprint
+    authority_timeout: 0.3
+    command_timeout: 0.2
+    max_linear_speed: 0.5
+    max_angular_speed: 1.0
+stm32_telemetry_adapter:
+  ros__parameters:
+    use_sim_time: false
+    input_topic: /stm32/status
+    output_topic: /motion/telemetry
+    source_id: stm32
+    base_frame: base_footprint
+    status_timeout: 0.3
+hurricane_skill_server:
+  ros__parameters:
+    use_sim_time: false
+    dry_run: false
+    skill_forward_speed: 0.08
+    skill_turn_speed: 0.25
+    gateway_status_timeout: 0.3

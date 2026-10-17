@@ -1,18 +1,22 @@
 # Hurricane 移植与使用
 
+> STM32 接入更新：自制机器人不支持横移。新增单串口网关默认禁用运动；Hurricane 实机改走共享网关。协议为待固件实现草案，见 [STM32 接入指南](../../docs/STM32_BRIDGE_GUIDE.md)。下文原有定位/规划诊断入口继续保留。
+
+
 来源为 2026-10-14 同步的 Hurricane `ros2_to_stm32` 上位机代码。移植的是 Unitree 版本的动作编号、八类障碍的航点／模式／跳跃设计，以及两点场地标定、障碍采点功能。没有迁入另一套 Mi 指令编号，也没有复制 FAST-LIO／Livox 驱动或下位机固件。仓库原有的 Mission FSM、ControlHandoff、独立运动状态检查、定位证据与出口验收流程继续使用。
 
 ## 已移植的功能
 
 | 文件 | 职责 |
 |---|---|
-| `hurricane_protocol.py` | 原 `S编号E\r\n` 编码、115200 波特率、持久串口、显式端口与无硬件 DryRun |
+| `hurricane_protocol.py` | 保留原 `S编号E\r\n` 编码与旧 SerialTransport 供兼容/测试，正式服务器不再构造它 |
 | `hurricane_skills.yaml` | 木桥A/B、大斜坡、限高栏、沙坑、绕杆、高墙、台阶的原始动作设计 |
 | `hurricane_skills.py` | 非阻塞技能执行、局部坐标转换、独立阶段与完成反馈门控 |
-| `hurricane_server.py` | `/execute_obstacle` Action 服务、TF 与控制权检查、串口输出与反馈关联 |
+| `hurricane_server.py` | `/execute_obstacle` Action 服务、TF 与控制权检查、统一网关请求与真实 STATUS 关联 |
+| `hurricane_gateway_transport.py` | 方向速度经 MotionArbiter，离散请求交唯一串口网关，匹配真实完成反馈 |
 | `hurricane_capture.py` | TF 采点面板、离线采点、八障碍路线与技能参数导出 |
 
-Unitree 原表中前进=2、站立=5、小跳1/2=6/7、下台阶=8、正常模式=9，模式编号一直到台阶=18，左右平移=19/20。`repeat` 表示重复串口帧数，不是动作完成次数。发送成功只证明本机写入；`stand/stop` 仅对应原“站立”命令，不能替代硬件急停。
+以下编号仅为历史 Hurricane 内部设计，不是 STM32 已实现协议。Unitree 原表中前进=2、站立=5、小跳1/2=6/7、下台阶=8、正常模式=9，模式编号一直到台阶=18，左右平移=19/20。旧 `repeat` 表示重复帧数，不是动作完成次数；新网关每阶段仅发一个关联请求，不会按 repeat 重复起跳。发送成功只证明本机写入；`stand/stop` 仅对应原“站立”命令，不能替代硬件急停。
 
 ## 与原代码的必要差异
 
@@ -61,33 +65,24 @@ ros2 run robocon_mission hurricane_capture --file /绝对路径/field.yaml \
 
 实机技能服务器在入口与执行期间持续查询 `/mission/localization_ok`；服务缺失、失败或超时会阻止开始或请求站立并中止，不会仅以新鲜 TF 冒充定位质量有效。
 
-原 UART 协议没有 ACK 或动作完成回包。仓库也不含接收编号的 STM32 固件／Go2 SDK 执行端。实机启动前，已有电控适配器必须把真实测量与执行结果发布到 `/hurricane/controller_feedback`（`std_msgs/String` JSON）；不要用固定定时器、串口 write 返回值或机器人目标位置生成成功反馈。
+旧 UART 协议没有 ACK 或动作完成回包。当前实机模式使用 `hurricane_gateway_transport.py`，通过 `/stm32/skill_request` 请求唯一串口网关；只从 `/stm32/status` 中匹配本次 request、runner session、step、串口 session 的真实 STATUS 确认动作。接收 ACK、发送成功或 elapsed wait 均不能完成动作。未实现能力返回 UNSUPPORTED；左右平移始终拒绝。旧 `/hurricane/controller_feedback` 只为 dry-run 或测试注入保留，实机网关模式不订阅它。完整线协议、状态字段、部署与首次 HELLO 测试见 [STM32 指南](../../docs/STM32_BRIDGE_GUIDE.md)。
 
-```json
-{
-  "stamp_ns": 1770000000000000000,
-  "session_id": "当前 /hurricane/status 中的 session_id",
-  "obstacle_id": "bridge_a",
-  "step_index": 2,
-  "event": "completed",
-  "completed": true,
-  "safe_stance": true,
-  "control_released": false
-}
-```
+以下描述的是服务器内部使用的阶段证据语义，由 GatewayTransport 根据真实 STATUS 构造，不允许另起节点伪造成功反馈。
 
 时间戳必须使用同一 ROS 时钟，为实际测量时间、递增且不早于实际命令发送边界。反馈由当前 session 与 step 唯一关联；每阶段分别确认，不能重放上一阶段状态。`event=progress` 表示仍在执行，`event=failed`、`known=false`、非空 `error_code` 或否定安全状态会阻止推进并停车。最短等待结束时仍要求反馈新鲜，控制器需持续发布当前阶段真实状态。最终阶段 `step_index=len(steps)` 才能确认 `control_released=true`。该标志表示技能输出可释放，不代表仲裁器已经切换 NAVIGATION。
 
 真实仲裁器另须提供 `SetControlMode` 服务 `/motion/set_control_mode` 和 `ControlState` 心跳 `/motion/control_state`，按 mission_id/request_id、expected_owner 与租约实际屏蔽未授权输出。使用本仓库的 `go2_obstacle_interfaces` 并统一重编译；旧 Action 类型缺少 safe_stance/error_code 时会拒绝硬件适配器。仅发零速度或修改 Python owner 不等于安全支撑；物理保护仍由独立底层承担。Nav2 输出与串口技能输出须实际纳入同一仲裁链路。
 
-Hurricane 服务只消费 `/hurricane/controller_feedback`，不提供 `/motion/get_state`。原 Mission 在 Action 成功后仍独立调用 `GetMotionState`，要求真实的 known、安全站姿、技能停止、可释放与无故障状态，并核对 obstacle_id。电控接入须同时提供这两份真实反馈；不能拿 Action 结果代替独立运动状态。原有 MotionTelemetry、MotionAuthority 与 MotionCommand 的底层接入要求见任务包 README 和根 README。
+Hurricane 实机服务消费统一网关状态，不提供 `/motion/get_state`；该服务由 MotionArbiter 独占。原 Mission 在 Action 成功后仍独立调用 `GetMotionState`，要求真实的 known、安全站姿、技能停止、可释放与无故障状态，并核对 obstacle_id。同一真实 STATUS 分别供技能阶段确认和 MotionTelemetry 映射，但两项检查保持独立；不能拿 Action 结果代替独立运动状态。原有 MotionTelemetry、MotionAuthority 与 MotionCommand 的底层接入要求见任务包 README 和根 README。
 
 当电控反馈、独立运动状态、仲裁、定位证据、预检查和现场参数均完成对接后，可按以下形式集成。占位参数须替换为真实部署端点：
 
 ```bash
-ros2 launch robocon_mission hurricane.launch.py \
-  skills_file:=/绝对路径/calibrated_skills.yaml \
-  dry_run:=false serial_port:=/dev/serial/by-id/你的电控设备
+ros2 launch go2_onboard_bringup stm32_bringup.launch.py \
+  port:=/dev/serial/by-id/你的电控设备 \
+  params_file:=$HOME/.config/rc2026/stm32.yaml \
+  test_mode:=false enable_motion:=true calibration_confirmed:=true \
+  start_hurricane:=true skills_file:=/绝对路径/calibrated_skills.yaml
 ros2 launch robocon_mission mission.launch.py \
   route_file:=/绝对路径/hurricane_route.yaml \
   simulation_mode:=false use_sim_time:=false autostart:=false \

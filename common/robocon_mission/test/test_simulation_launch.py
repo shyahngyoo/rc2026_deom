@@ -49,8 +49,11 @@ def test_patrol_controller_can_finish_yaw_at_transit_tolerance():
         controller["transit_goal_checker"]["xy_goal_tolerance"]
     approach = controller["FollowPathApproach"]
     assert approach["PrecisionPose.class"] == "go2_nav_bringup::PrecisionPoseCritic"
-    assert approach["min_vel_x"] < 0.0 and approach["min_vel_y"] < 0.0
-    assert approach["max_vel_y"] > 0.0
+    # Hardware contract changed: the custom STM32 quadruped cannot strafe.
+    assert approach["min_vel_x"] < 0.0
+    assert approach["min_vel_y"] == approach["max_vel_y"] == 0.0
+    assert approach["acc_lim_y"] == approach["decel_lim_y"] == 0.0
+    assert approach["vy_samples"] == 1 and approach["PrecisionPose.holonomic"] is False
     assert approach["PrecisionPose.max_xy_speed"] <= approach["max_speed_xy"]
     assert approach["PrecisionPose.max_yaw_speed"] <= approach["max_vel_theta"]
     assert "BaseObstacle" in approach["critics"] and "RotateToGoal" not in approach["critics"]

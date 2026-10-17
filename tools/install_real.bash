@@ -42,7 +42,7 @@ ros_setup=/opt/ros/humble/setup.bash
 [[ -f "$repo_dir/dependencies.repos" && -f "$repo_dir/dependencies.lock.yaml" ]] || fail 'source dependency manifests are missing'
 runtime_rel=(common/go2_obstacle_interfaces common/go2_fastlio_localization common/go2_nav_bringup
   common/robocon_mission common/go2_mission_backends real/go2_real_localization
-  real/go2_real_bringup real/go2_onboard_bringup)
+  real/go2_real_bringup real/quadruped_stm32_bridge real/go2_onboard_bringup)
 runtime_paths=()
 for relative in "${runtime_rel[@]}"; do
   [[ -f "$repo_dir/$relative/package.xml" ]] || fail "runtime package missing: $relative/package.xml"
@@ -238,4 +238,4 @@ printf '\nInstalled runtime only. Next steps (no movement is enabled):\n'
 printf '  source /opt/ros/humble/setup.bash\n  source %q\n' "$workspace/install/setup.bash"
 printf '  ros2 run go2_onboard_bringup configure_robot --help\n'
 printf 'Configure real MID-360 IP, measured IMU installation, map and fixed start pose.\n'
-printf 'No Gazebo/CHAMP/CUDA or motor driver is installed; no example map is configured and no fake state/test skill is started.\n'
+printf 'No Gazebo/CHAMP/CUDA is installed; STM32 bridge defaults disable motion, no firmware is flashed, no example map or fake state/test skill is started.\n'

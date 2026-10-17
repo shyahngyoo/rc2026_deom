@@ -1,0 +1,22 @@
+motion_arbiter:
+  ros__parameters:
+    simulation_mode: false
+    enable_output: false
+    nav_input: /motion/nav_command
+    skill_input: /motion/skill_command
+    # Twist remains diagnostic; only the lease-bound typed output reaches UART.
+    output_topic: /stm32/arbiter_cmd_vel
+    authorized_output_topic: /stm32/arbiter_command
+    telemetry_topic: /motion/telemetry
+    telemetry_source_id: stm32
+    base_frame: base_footprint
+    odom_frame: nav_odom
+    state_timeout: 0.5
+    command_timeout: 0.5
+    max_command_age: 0.3
+    stable_duration: 0.15
+    stable_linear_velocity: 0.03
+    stable_angular_velocity: 0.05
+    max_linear_speed: 0.5
+    max_angular_speed: 1.0
+    output_frequency: 20.0

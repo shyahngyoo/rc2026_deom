@@ -1,8 +1,8 @@
-"""ExecuteObstacle server for transplanted Hurricane sequences and serial frames.
+"""ExecuteObstacle adapter using a single external STM32 serial gateway.
 
-The legacy UART has no completion frames. An independent controller adapter must
-publish matching, measured feedback; a successful write or elapsed wait is never
-treated as completion. Default dry_run records frames and opens no serial port.
+Only matching, fresh gateway STATUS proves completion in real mode.  The legacy
+transport remains available for injected software tests; this server never opens
+a hardware serial port. Default dry_run records frames without hardware output.
 """
 import json
 import math
@@ -25,7 +25,8 @@ from std_srvs.srv import Trigger
 from tf2_ros import Buffer, TransformListener
 from pathlib import Path
 
-from .hurricane_protocol import DryRunTransport, SerialTransport
+from .hurricane_protocol import DryRunTransport
+from .hurricane_gateway_transport import GatewayTransport
 from .hurricane_skills import SkillRunner, load_skills
 
 
@@ -64,6 +65,13 @@ class HurricaneServer(Node):
             "health_timeout": 0.5,
             "controller_feedback_topic": "/hurricane/controller_feedback",
             "control_state_topic": "/motion/control_state",
+            "gateway_status_topic": "/stm32/status",
+            "gateway_event_topic": "/stm32/event",
+            "gateway_request_topic": "/stm32/skill_request",
+            "authority_topic": "/motion/authority",
+            "skill_command_topic": "/motion/skill_command",
+            "gateway_status_timeout": 0.3,
+            "skill_forward_speed": 0.08, "skill_turn_speed": 0.25,
         }
         for key, value in defaults.items():
             self.declare_parameter(key, value)
@@ -73,16 +81,27 @@ class HurricaneServer(Node):
                                        for name in ("safe_stance", "error_code")):
             raise ValueError("rebuild go2_obstacle_interfaces with safe_stance/error_code")
         for key in ("pose_timeout", "step_timeout", "confirmation_timeout",
-                    "control_state_timeout", "health_timeout"):
+                    "control_state_timeout", "health_timeout", "gateway_status_timeout",
+                    "skill_forward_speed", "skill_turn_speed"):
             if not math.isfinite(param(key)) or param(key) <= 0:
                 raise ValueError(key + " must be finite and positive")
         if self.dry_run and transport is not None and not isinstance(transport, DryRunTransport):
             raise ValueError("dry_run only accepts DryRunTransport")
         profiles = load_skills(param("skills_file"))
-        if not self.dry_run and not any(p["calibrated"] for p in profiles.values()):
-            raise ValueError("hardware skills require site-calibrated profiles")
-        self.transport = transport or (DryRunTransport() if self.dry_run else
-                                       SerialTransport(param("serial_port"), param("baudrate")))
+        group = ReentrantCallbackGroup()
+        if not self.dry_run and param("serial_port"):
+            raise ValueError("serial_port belongs to quadruped_stm32_bridge; "
+                             "Hurricane uses the shared STM32 gateway")
+        self.transport = transport or (DryRunTransport() if self.dry_run else GatewayTransport(
+            self, self._gateway_context, self._feedback, callback_group=group,
+            health_ready=self._health_ready,
+            status_topic=param("gateway_status_topic"), event_topic=param("gateway_event_topic"),
+            request_topic=param("gateway_request_topic"), authority_topic=param("authority_topic"),
+            command_topic=param("skill_command_topic"),
+            status_timeout=param("gateway_status_timeout"),
+            authority_timeout=param("control_state_timeout"),
+            forward_speed=param("skill_forward_speed"), turn_speed=param("skill_turn_speed"),
+            base_frame=param("base_frame")))
         self.runner = SkillRunner(profiles, ObservedTransport(self.transport, self._before_send),
                                   pose_timeout=param("pose_timeout"),
                                   step_timeout=param("step_timeout"),
@@ -96,6 +115,7 @@ class HurricaneServer(Node):
         self.control_state = None
         self.control_received = 0.0
         self.control_mission_id = ""
+        self.control_generation = 0
         self.phase_key = None
         self.phase_started_ns = 0
         self.final_release = False
@@ -113,11 +133,15 @@ class HurricaneServer(Node):
         self.health_client = (None if self.dry_run else self.create_client(
             Trigger, param("localization_ok_service")))
         self.use_sim_time = self.get_parameter("use_sim_time").value
-        group = ReentrantCallbackGroup()
-        self.feedback_sub = self.create_subscription(
-            String, param("controller_feedback_topic"), self._feedback, 10,
-            callback_group=group)
+        # Legacy feedback is source-only test plumbing. Real completion can only
+        # arrive through the gateway transport, with its original STATUS stamp.
+        if not isinstance(self.transport, GatewayTransport):
+            self.feedback_sub = self.create_subscription(
+                String, param("controller_feedback_topic"), self._feedback, 10,
+                callback_group=group)
         self.status_pub = self.create_publisher(String, "/hurricane/status", 10)
+        self.ready_service = self.create_service(Trigger, "/skills/ready", self._skills_ready,
+                                                 callback_group=group)
         if not self.dry_run:
             from go2_obstacle_interfaces.msg import ControlState
             self.control_sub = self.create_subscription(
@@ -158,7 +182,9 @@ class HurricaneServer(Node):
         return (msg.owner == "SKILL" and msg.healthy and bool(msg.mission_id)
                 and (not self.control_mission_id or msg.mission_id == self.control_mission_id)
                 and stamp > 0 and -0.1 <= age <= timeout
-                and time.monotonic() - self.control_received <= timeout)
+                and time.monotonic() - self.control_received <= timeout
+                and (not isinstance(getattr(self, "transport", None), GatewayTransport)
+                     or self.transport.ready()))
 
     def _health_ready(self):
         return self.dry_run or (self.health_valid and time.monotonic() - self.health_received <=
@@ -189,6 +215,17 @@ class HurricaneServer(Node):
                 self.health_valid = False
 
     @serialized
+    def _skills_ready(self, _request, response):
+        available = (self.transport.available_skills(self.runner.skills)
+                     if isinstance(self.transport, GatewayTransport) else [])
+        response.success = bool(available)
+        response.message = json.dumps({
+            "skills": available, "simulation_mode": self.dry_run,
+            "reason": "READY" if available else "NOT_CONFIGURED_OR_GATEWAY_UNAVAILABLE",
+        })
+        return response
+
+    @serialized
     def _request(self, request):
         if (self.reserved or not self._authorized() or not self._health_ready()
                 or not request.obstacle_id or self._pose() is None):
@@ -214,6 +251,8 @@ class HurricaneServer(Node):
         self.phase_key = None
         self.feedback_key = None
         self.control_mission_id = ("" if self.dry_run else self.control_state.mission_id)
+        self.control_generation = (self.transport.authority.generation
+                                   if isinstance(self.transport, GatewayTransport) else 0)
         goal.execute()
 
     async def _execute(self, goal):
@@ -234,6 +273,7 @@ class HurricaneServer(Node):
                     self.future = None
                     self.reserved = False
                     self.control_mission_id = ""
+                    self.control_generation = 0
                     self.execution_started = False
 
     @serialized
@@ -256,6 +296,20 @@ class HurricaneServer(Node):
             return (tf.transform.translation.x, tf.transform.translation.y, yaw)
         except Exception:
             return None
+
+    def _gateway_context(self):
+        return {
+            "runner_session": self.runner.session_id, "step_index": self.runner.index,
+            "obstacle_id": self.runner.obstacle_id,
+            "mission_id": self.control_mission_id, "generation": self.control_generation,
+            "active": (self.goal is not None and self.future is not None
+                       and not self.future.done() and self.execution_started),
+        }
+
+    def _cancel_runner(self):
+        if isinstance(getattr(self, "transport", None), GatewayTransport):
+            self.transport.cancel()
+        self.runner.cancel(time.monotonic())
 
     def _before_send(self):
         self.phase_key = (self.runner.session_id, self.runner.index)
@@ -296,7 +350,7 @@ class HurricaneServer(Node):
                 stopped = self.runner.feedback(data["session_id"], index, False, False,
                                                time.monotonic())
                 if not stopped:
-                    self.runner.cancel(time.monotonic())
+                    self._cancel_runner()
                 self._finish(False, "controller reported failure or unsafe stance")
                 return
             if event not in ("completed", "state"):
@@ -326,7 +380,8 @@ class HurricaneServer(Node):
             result.safe_stance = completed and not self.dry_run
         if hasattr(result, "error_code"):
             result.error_code = ("DRY_RUN" if completed and self.dry_run else
-                                 "" if completed else "HURRICANE_SKILL_FAILED")
+                                 "" if completed else "UNSUPPORTED" if "UNSUPPORTED" in error
+                                 else "HURRICANE_SKILL_FAILED")
         return result
 
     @serialized
@@ -344,19 +399,21 @@ class HurricaneServer(Node):
     @serialized
     def _tick(self):
         self._poll_health()
+        if isinstance(getattr(self, "transport", None), GatewayTransport):
+            self.transport.tick()
         if self.goal is None or self.future is None or self.future.done() or not self.execution_started:
             return
         try:
             if self.goal.is_cancel_requested:
-                self.runner.cancel(time.monotonic())
+                self._cancel_runner()
                 self._finish(False, "canceled; physical release remains unconfirmed", True)
             elif not self._authorized() or not self._health_ready():
-                self.runner.cancel(time.monotonic())
+                self._cancel_runner()
                 self._finish(False, "SKILL ownership or localization health lost")
             else:
                 pose = self._pose()
                 if pose is None:
-                    self.runner.cancel(time.monotonic())
+                    self._cancel_runner()
                     self._finish(False, "localization pose stale")
                     return
                 now = time.monotonic()
@@ -376,7 +433,7 @@ class HurricaneServer(Node):
                     self._finish(False, self.runner.error or status)
         except Exception as error:
             try:
-                self.runner.cancel(time.monotonic())
+                self._cancel_runner()
             except Exception:
                 pass
             self._finish(False, str(error))
@@ -394,7 +451,7 @@ class HurricaneServer(Node):
     def close(self):
         try:
             if self.goal is not None and self.future is not None and not self.future.done():
-                self.runner.cancel(time.monotonic())
+                self._cancel_runner()
                 self._finish(False, "shutdown; physical release remains unconfirmed")
         finally:
             self.transport.close()

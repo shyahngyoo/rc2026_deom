@@ -14,13 +14,11 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument("skills_file", default_value=profile),
         DeclareLaunchArgument("dry_run", default_value="true"),
-        DeclareLaunchArgument("serial_port", default_value=""),
         DeclareLaunchArgument("use_sim_time", default_value="false"),
         Node(package="robocon_mission", executable="hurricane_skill_server",
              name="hurricane_skill_server", output="screen", parameters=[{
                  "skills_file": LaunchConfiguration("skills_file"),
                  "dry_run": ParameterValue(LaunchConfiguration("dry_run"), value_type=bool),
-                 "serial_port": LaunchConfiguration("serial_port"),
                  "use_sim_time": ParameterValue(LaunchConfiguration("use_sim_time"), value_type=bool),
              }]),
     ])

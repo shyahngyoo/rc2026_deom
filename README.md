@@ -1,8 +1,11 @@
 # RC2026 机器马机载导航与 Mission 后端
 
-当前 `rely-only` 分支面向团队自制四足机器狗：STM32 经 USB 串口连接 ROS 2 上位机，不使用 Go2 官方运动 SDK。本次只清理 Mock 与废弃入口，没有开发 STM32 驱动或开启运动输出。变更与验证见 [清理报告](docs/RELY_ONLY_CLEANUP_REPORT.md)。
+> STM32 接入更新：自制机器人不支持横移。新增单串口网关默认禁用运动；Hurricane 实机改走共享网关。协议为待固件实现草案，见 [STM32 接入指南](docs/STM32_BRIDGE_GUIDE.md)。下文原有定位/规划诊断入口继续保留。
 
-面向 **Ubuntu 22.04 / ROS 2 Humble、MID-360 自带 IMU、支持 `/cmd_vel` 与横移的机器马**。
+
+`rely-only` 面向团队自制 STM32 四足机器狗，不使用 Go2 官方运动 SDK。新增 USB-TTL 单串口协议草案与 ROS 接入，默认不开启运动输出；STM32 固件端仍需实现并联调。此前 Mock 清理记录见 [清理报告](docs/RELY_ONLY_CLEANUP_REPORT.md)。
+
+面向 **Ubuntu 22.04 / ROS 2 Humble、MID-360 自带 IMU、仅支持前后和转向、禁止横移的 STM32 四足机器人**。
 
 ## 从这里开始实机操作
 
@@ -32,11 +35,12 @@ bash tools/install_real.bash --jobs 2
 | 实际场地全局定位 | `mode:=localization` | 加载实际 PCD 和 IMU 初猜，GICP 与定位证据 |
 | Nav2 路径/控制诊断 | `mode:=navigation` | 真实地图与定位；速度仅在 `/onboard/nav_cmd_*` |
 | 八障碍采点与技能导出 | `capture_panel`、`hurricane_capture` | 现场 26 点、路线与技能配置；面板需要图形会话 |
-| Hurricane 技能适配 | `hurricane.launch.py` | 独立串口扩展，默认 dry-run；实际控制需确认协议、反馈与仲裁 |
+| 串口握手与状态诊断 | `stm32_bringup.launch.py port:=...` | 新协议草案，默认关闭运动输出，不启动 Mission |
+| Hurricane 技能适配 | `hurricane.launch.py` | 独立预览默认 dry-run；实机使用共享 STM32 网关 |
 
 机载 `real.launch.py` 属于 `go2_onboard_bringup`，始终需要先生成真实配置。具体可复制命令均在实机指南中。
 
-**当前默认入口尚不能驱动机器马自动跑完整场障碍赛。** 真实停稳/支撑反馈、生产 Nav2 命令适配和统一控制权链路还需接入；Hurricane 适配器的存在不等于这些接口已接通。`navigation` 不发布机器人 `/cmd_vel`，不启动整场 Mission。指南第 9 节列出接入清单、实际端点与验收顺序。
+**当前默认入口尚不能驱动机器马自动跑完整场障碍赛。** ROS 侧 Nav2 命令适配、统一仲裁与单串口链路已提供；真实停稳/支撑反馈、STM32 协议与现场标定仍需联调。`navigation` 不发布机器人 `/cmd_vel`，不启动整场 Mission。指南第 9 节列出接入清单、实际端点与验收顺序。
 
 ## 进一步阅读
 

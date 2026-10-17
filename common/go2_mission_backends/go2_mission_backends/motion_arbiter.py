@@ -20,7 +20,7 @@ class MotionArbiter(Node):
     def __init__(self, **kwargs):
         super().__init__('motion_arbiter', **kwargs)
         defaults = dict(nav_input='/motion/nav_command', skill_input='/motion/skill_command',
-            output_topic='/backend_sim/cmd_vel', telemetry_topic='/motion/telemetry',
+            output_topic='/backend_sim/cmd_vel', authorized_output_topic='', telemetry_topic='/motion/telemetry',
             enable_output=False, simulation_mode=False, state_timeout=0.5,
             command_timeout=0.5, max_command_age=0.3, max_linear_speed=0.5,
             max_angular_speed=1.0, stable_duration=0.15,
@@ -44,6 +44,10 @@ class MotionArbiter(Node):
         self.odom_stamp=0; self.odom_at=0.0; self.last_ros=None
         self.stop=StopMonitor(self,self.state_timeout,p('stable_linear_velocity'),p('stable_angular_velocity'),p('stable_duration'))
         self.output_pub=self.create_publisher(Twist,p('output_topic'),1)
+        typed_output=p('authorized_output_topic')
+        if typed_output and typed_output in (p('output_topic'),p('nav_input'),p('skill_input')):
+            raise ValueError('authorized output must differ from all command topics')
+        self.authorized_pub=(self.create_publisher(MotionCommand,typed_output,1) if typed_output else None)
         self.control_pub=self.create_publisher(ControlState,'/motion/control_state',10)
         self.authority_pub=self.create_publisher(MotionAuthority,'/motion/authority',10)
         self.status_pub=self.create_publisher(String,'/motion/status',10)
@@ -142,6 +146,12 @@ class MotionArbiter(Node):
         msg.angular.x,msg.angular.y,msg.angular.z=values[3:]
         self.output_pub.publish(msg)
         stamp=self.get_clock().now().to_msg()
+        if self.authorized_pub is not None:
+            authorized=MotionCommand();authorized.header.stamp=stamp
+            authorized.header.frame_id=self.base_frame
+            authorized.owner=self.core.owner;authorized.mission_id=self.core.mission_id
+            authorized.generation=self.core.generation;authorized.twist=msg
+            self.authorized_pub.publish(authorized)
         cs=ControlState(stamp=stamp,owner=self.core.owner,mission_id=self.core.mission_id,healthy=self.fresh())
         self.control_pub.publish(cs)
         a=MotionAuthority();a.header.stamp=stamp;a.owner=self.core.owner;a.mission_id=self.core.mission_id
