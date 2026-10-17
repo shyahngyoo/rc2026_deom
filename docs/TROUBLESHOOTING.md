@@ -236,7 +236,8 @@ ros2 run robocon_mission hurricane_preview --skill bridge_a
 
 ```bash
 ros2 action info /execute_obstacle
-ros2 topic info /hurricane/controller_feedback --verbose
+ros2 topic info /stm32/status --verbose
+ros2 topic info /stm32/event --verbose
 ros2 service type /motion/get_state
 ```
 
@@ -244,7 +245,7 @@ ros2 service type /motion/get_state
 
 若报串口设备缺失或权限错误，可只读检查 `ls -l /dev/serial/by-id` 和 `id -nG`：先确认实际设备存在、端点稳定、当前用户具备团队批准的访问权限。不要用无关串口替代，也不通过全局开放设备权限试动作。
 
-真实技能执行需要实测标定、经电控确认的串口端点与协议、当前 session／step 关联的 `/hurricane/controller_feedback`、独立 `/motion/get_state`、定位质量、实际仲裁和支撑保护。串口 write 成功不能证明动作完成，Hurricane Action 结果也不能代替独立运动状态。缺少反馈时不通过关闭 dry-run、补固定定时成功或改门控来排错。具体反馈字段和接入契约见 [HURRICANE_PORT.md](../common/robocon_mission/HURRICANE_PORT.md)与[控制接入说明](CONTROL_INTEGRATION.md)。
+真实技能执行需要实测标定、经电控确认的串口端点与协议、匹配当前 request／runner_session／step／串口 session 的 `/stm32/status`、独立 `/motion/get_state`、定位质量、实际仲裁和支撑保护。串口 write 成功不能证明动作完成，Hurricane Action 结果也不能代替独立运动状态。缺少反馈时不通过关闭 dry-run、补固定定时成功或改门控来排错。实机不订阅旧 `/hurricane/controller_feedback`；它仅保留给 dry-run/测试。具体反馈字段和接入契约见 [HURRICANE_PORT.md](../common/robocon_mission/HURRICANE_PORT.md)与[控制接入说明](CONTROL_INTEGRATION.md)。
 
 ## 9. 反馈问题时提供什么
 

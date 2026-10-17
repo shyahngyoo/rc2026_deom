@@ -1,6 +1,6 @@
 # STM32 单串口接入指南（协议 v1 草案）
 
-本模块面向自制四足机器人，不使用宇树 SDK，不使用 E34 或无线遥控。ROS 2 上位机不生成关节轨迹。**现有 STM32 参考固件没有实现本协议；目前交付的是可用伪串口验证的软件接入基础，不能插线后直接跑比赛。**
+本模块面向自制四足机器人，不使用宇树 SDK；自动化链路使用独立 Host UART，保留固件 E34 遥控协议，但两路普通运动控制权必须互斥。ROS 2 上位机不生成关节轨迹。**现有 STM32 参考固件没有实现本协议；目前交付的是可用伪串口验证的软件接入基础，不能插线后直接跑比赛。**
 
 ## 1. 已接入的软件路径
 
@@ -142,74 +142,11 @@ ros2 service call /mission/start std_srvs/srv/Trigger '{}'
 
 当前 Nav2 onboard 模板仍为静态地图诊断 costmap，动态障碍物接入、实机足迹/雷达盲区、运动与定位效果均需验证。本通信模块交付不能解释为已可自动跑完整障碍赛。
 
-## 6. 线协议 v1 草案
+## 6. 独立线协议规范
 
-所有整数为 little-endian；串口默认 115200，8N1。无协议自动使能电机。最大 JSON payload 1024 bytes，最大帧 1046 bytes。
+完整帧结构、全部消息字段、ACK/STATUS 语义、会话与去重、状态切换、超时参数及待确认固件约定，统一见 [STM32 Host UART v1 协议规范](STM32_HOST_PROTOCOL_V1.md)。本节不再维护第二套协议定义。
 
-| Offset | 长度 | 字段 |
-| --- | --- | --- |
-| 0 | 2 | magic `A5 5A` |
-| 2 | 1 | version `01` |
-| 3 | 1 | message type |
-| 4 | 2 | UTF-8 JSON 字节数，不含 header/CRC |
-| 6 | 4 | sequence，非零 uint32 |
-| 10 | 8 | session，主机每次串口连接新生成的非零 uint64 |
-| 18 | length | 紧凑 JSON object，不允许重复键、NaN/Inf |
-| 18+length | 4 | CRC32(header+payload)，little-endian |
-
-CRC 为 Python `zlib.crc32` 对应 CRC-32/ISO-HDLC，反射多项式 `0xEDB88320`，初值 `0xFFFFFFFF`、xorout `0xFFFFFFFF`。不是旧无线 CRC16。
-
-| Type | 名称 | payload 要点 |
-| --- | --- | --- |
-| 1 | HELLO | `protocol_version:1`，host 标识；只协商，不使能 |
-| 2 | SET_MODE | `mode`、`mission_id`、`generation`；模式接收不代表实际 active |
-| 3 | WALK | `forward/turn` 归一化 `[-1,1]`；`owner/mission_id/generation/valid_for_ms` |
-| 4 | SKILL_START | `command_id`、`request_id`、`runner_session`、`obstacle_id`、`step_index` |
-| 5 | SKILL_CANCEL | 取消关联技能请求，结束必须另由状态确认 |
-| 6 | HOLD | 请求保持支撑；不能用 motor STOP 假充 |
-| 7 | STOP | 驱动停机/卸力请求，需当前有效 SKILL 授权，与站立支撑不同，不自动发送 |
-| 8 | HEARTBEAT | 当前 owner/mission/generation/TTL；不修改正在执行的离散轨迹 |
-| 128 | ACK | `acked_sequence/acked_type/accepted`，可带 reason；不是完成 |
-| 129 | STATUS | 下表的真实状态与动作关联 |
-| 130 | FAULT | `code`，收到后封锁运动 |
-
-HELLO ACK 示例（ACK 帧仍有自己的 device sequence）：
-
-```json
-{"acked_sequence":1,"acked_type":1,"accepted":true,"protocol_version":1,"features":["HOLD","SET_MODE","WALK","STATUS","HEARTBEAT","SKILL_START","SKILL_CANCEL"]}
-```
-
-必需 `HOLD/SET_MODE/WALK/STATUS/HEARTBEAT`，缺少其中任意能力不会完成握手。额外技能能力还需 STATUS 的 capabilities 显式声明。
-
-STATUS 必填字段：
-
-| 字段 | 类型/语义 |
-| --- | --- |
-| known | bool，控制器自身状态可信 |
-| mode | `HOLD/NAVIGATION/SKILL/DISABLED` |
-| nav_active、skill_active | bool，真实执行器活动，不能同时 true；不是主机模式请求的回显 |
-| stopped | bool，实际停稳，不是“上次收到零速度” |
-| safe_stance | bool，已验证支撑，不能等同 static_support_requested |
-| control_releasable | bool，实际允许交接；活动或危险阶段不得释放 |
-| estop、human_enable | bool，独立急停和人工授权实测状态 |
-| obstacle_id、fault_code | string；无故障用空字符串 |
-| skill_state | `idle/accepted/running/succeeded/failed/canceled` |
-| capabilities | unique int[]，实际支持的 Hurricane 离散编号 1..18；19/20 永不支持 |
-| request_id、runner_session、step_index | 技能关联，必须回显当前请求，旧终态不能完成新动作 |
-
-旧 Hurricane 1..4 只在 ROS 侧映射成受仲裁的前后/转向速度，不直接把旧编号原样当固件 API。5 对应 HOLD 请求，6/7 是两个待映射跳跃，8..18 均无预设固件支持。C 端应明确哪些离散编号支持哪种真实 API，不能假设 6=原地跳、7=前跃已经谈妥。
-
-时序/防重放约定：
-
-- 两个方向各自维护 sequence，同连接 session 下严格递增；到 uint32 上限关闭会话、重新 HELLO，不能绕回。
-- MCU 对 `(session,sequence)` 重复帧只回放原 ACK，不重复起跳；未缓存且小于已接收最高 sequence 的旧命令拒绝。新 session 清除旧速度/租约/排队动作，进入受控安全策略，不恢复运行。
-- 默认 status/authority timeout 为 0.3 s、command TTL 为 0.2 s；ACK timeout 0.15 s，最多 2 次重试；HELLO timeout 2 s，串口重连间隔 1 s，总尝试最多 5 次。以外部 yaml 为准，C 端必须设独立硬上限，不能任主机要求无限 TTL。
-- ACK 重发保留原 sequence；START 只能执行一次；新速度取代旧未完成的速度发送。相同 runner/request 重复请求不得再次执行；旧 WALK/HEARTBEAT 重试不得续 TTL 或恢复已被新 sequence 取代的速度。
-- STATUS 重复 sequence、错误 CRC、错误 session、ACK 和旧终态都不能刷新安全反馈；串口连接不等于 known，不等于停稳。
-- 主机断线、过期、失去租约、故障后清理队列与 pending；重连换 session，必须等待新的控制权 generation 和新命令。原任务应取消并人工评估，不自动续跑。
-- MCU 本地 watchdog 必须在主机进程死亡、USB拔出、通信停顿时独立触发经实机验证的支撑/落地/停机策略。主机尝试发 HOLD 不能替代这个机制。
-
-稳定 HELLO 测试向量（只含 `protocol_version:1`）位于 `protocol.py:TEST_VECTOR_HELLO` 和安装后的 `protocol/test_vectors.json`。C 端必须按字节比较，不依赖 JSON 对象键顺序重新计算接收帧 CRC。可通过 `python3 -m pytest real/quadruped_stm32_bridge/test/test_protocol_gateway.py` 验证。
+该规范按当前主机实现整理，并明确记录代码内置默认与随包 YAML、技能取消关联及各层完成判据的差异。它不表示 STM32 固件已经实现或已完成硬件安全验证；请先与固件同学确认规范中的《待双方确认的固件与安全约定》。
 
 ## 7. STM32 同学需要完成的工作
 

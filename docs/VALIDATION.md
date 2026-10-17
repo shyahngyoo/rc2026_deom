@@ -1,6 +1,6 @@
 # 发布前软件验证，2026-10-14
 
-此页记录 2026-10-14 发布前的软件验证。`rely-only` 清理后的测试迁移及新结果见 [RELY_ONLY_CLEANUP_REPORT.md](RELY_ONLY_CLEANUP_REPORT.md)；当前验证脚本已不再忽略历史 launch 测试文件。
+此页保留 2026-10-14 发布前的历史软件验证记录，不代表当前分支的完整验收结果。最新 STM32 接入验证及未通过项见 [STM32_BRIDGE_VALIDATION.md](STM32_BRIDGE_VALIDATION.md)。`rely-only` 清理后的测试迁移及新结果见 [RELY_ONLY_CLEANUP_REPORT.md](RELY_ONLY_CLEANUP_REPORT.md)；当前验证脚本已不再忽略历史 launch 测试文件。
 
 ## 实际执行结果
 
@@ -48,4 +48,4 @@ python3 -m pytest -q real/go2_onboard_bringup/test/test_doctor_ros.py real/go2_o
 
 ## 仍需真实设备验收
 
-真实 MID-360 收包与时间戳、LiDAR/IMU 及机体外参、实际地图初猜与定位误差、足式机体尺寸和横移控制、动态障碍扫描层、实际制动距离、安全支撑、急停、控制权交接及真实越障 action 均未在设备上验收。机载入口因此始终保持 `mission_allowed=false`、运动输出关闭。
+真实 MID-360 收包与时间戳、LiDAR/IMU 及机体外参、实际地图初猜与定位误差、足式机体尺寸和运动控制（当前 STM32 实机配置禁止横移）、动态障碍扫描层、实际制动距离、安全支撑、急停、控制权交接及真实越障 action 均未在设备上验收。本文所测 `real.launch.py` 诊断入口保持 `mission_allowed=false`、运动输出关闭。后续新增的 STM32 独立入口默认禁用运动，配置及其硬件验收边界见 [STM32 接入指南](STM32_BRIDGE_GUIDE.md)。

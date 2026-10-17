@@ -409,7 +409,7 @@ ros2 action send_goal /navigate_to_pose nav2_msgs/action/NavigateToPose \
   "$GOAL_JSON" --feedback
 ```
 
-目标接受后可在另一终端观察 `/onboard/nav_cmd_raw`。诊断目标只在独立诊断入口发送，不与运行中的 Mission 竞争目标。由于运动路径还未接入，机器人不移动，目标可能因无进展失败；**此阶段不以物理到达目标为验收条件**。不要将该 topic 直接 remap 到底层 `/cmd_vel` 来试图“让它先走”。
+目标接受后可在另一终端观察 `/onboard/nav_cmd_raw`。诊断目标只在独立诊断入口发送，不与运行中的 Mission 竞争目标。仅运行本节的 `real.launch.py` 诊断入口时，没有实体运动输出路径，目标可能因无进展失败；**此阶段不以物理到达目标为验收条件**。不要将该 topic 直接 remap 到底层 `/cmd_vel` 来试图“让它先走”。
 
 如要取消当前 Nav2 目标，显式请求取消（请求当前所有 Nav2 goal）：
 
@@ -485,8 +485,8 @@ Hurricane 源坐标的左右方向与 ROS 不同，工具内部已转换；外�
 
 | 需要交付的部分 | 必须有的真实数据 / 行为 | 当前操作判断 |
 |---|---|---|
-| 底层安全状态适配 | 新鲜 `/motion/telemetry`，真实停稳、安全支撑、技能活动与可释放；独立 `/motion/get_state` | 用户此前说明尚无这些状态，需电控/底层补接 |
-| 生产导航命令适配 | 将 Nav2 速度绑定权威 `mission_id/generation` 转成 `MotionCommand`，由唯一仲裁器输出 `/cmd_vel` | 当前私有诊断输出没有自动连接 |
+| 底层安全状态 | STM32 真实 STATUS 经已有 TelemetryAdapter 转成 `/motion/telemetry`，由仲裁器提供 `/motion/get_state` | 主机适配已实现，固件实测证据待接入 |
+| 导航命令链 | 已有 NavVelocityAdapter 将速度绑定 `mission_id/generation`，由唯一仲裁器输出 `/stm32/arbiter_command` 给网关 | 独立 STM32 启动入口提供，默认禁用运动；需标定与联调 |
 | Hurricane 执行端与反馈 | 电控实现新协议，提供匹配 request/session/step 的真实 STATUS；网关统一接入 | 串口写成功不是动作完成 |
 | 统一控制权 | Nav2 与串口动作实际受同一仲裁链路控制；故障、取消、超时有真实安全收尾 | 不能仅改变 ROS owner 字段 |
 | 实机启动检查配置 | 正确的唯一输出节点、真实低层状态、定位、技能、路线都通过 preflight | 默认机载 preflight 仍按“电机输出关闭”配置 |
@@ -499,14 +499,15 @@ ros2 service type /motion/get_state
 ros2 service type /motion/set_control_mode
 ros2 topic info /motion/control_state --verbose
 ros2 topic info /motion/authority --verbose
-ros2 topic info /hurricane/controller_feedback --verbose
+ros2 topic info /stm32/status --verbose
+ros2 topic info /stm32/arbiter_command --verbose
 ```
 
 有这些名字不等于完成接入；还须核对数据新鲜度、来源、会话和实际物理状态。精确契约见 [CONTROL_INTEGRATION.md](CONTROL_INTEGRATION.md)。
 
 Hurricane 独立预览默认 `dry_run:=true`。真实执行改用唯一 STM32 网关，不再发送旧 `S编号E` 串口帧，也不接受旧 feedback topic 作为实机完成证据。请按 STM32 接入指南完成协议、真实状态和仲裁联调。只读采点不需要打开串口。
 
-接入完成后的现场顺序应为：底层与急停可用 → 唯一仲裁器及真实状态 → 雷达/定位 → 生产 Nav2 命令适配 → 已标定的真实技能服务 → preflight 成功 → Mission 手动启动。先逐项完成“普通点、单个技能、单障碍完整链”验收，再自动整场。
+接入完成后的现场顺序应为：底层与急停可用 → 唯一仲裁器及真实状态 → 雷达/定位 → 已有 NavVelocityAdapter 与网关联调 → 已标定的真实技能服务 → preflight 成功 → Mission 手动启动。先逐项完成“普通点、单个技能、单障碍完整链”验收，再自动整场。
 
 实机 Mission 必须显式使用 `simulation_mode:=false`、`use_sim_time:=false`、`autostart:=false`。连接本仓库 `/localization/evidence` 时还必须使用 **`accepted_pose_type:=evidence`**；默认 `covariance` 不能读取这个消息类型。不得省略实机 preflight 服务来绕过启动检查。
 

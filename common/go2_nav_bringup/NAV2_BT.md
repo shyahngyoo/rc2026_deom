@@ -33,11 +33,11 @@
 | Goal Checker | `SimpleGoalChecker`，`stateful=true` | `StoppedGoalChecker`，`stateful=false` |
 | 速度停止判据 | 不独立检查 | 平面线速度 ≤`0.03 m/s`、yaw 角速度 ≤`0.05 rad/s` |
 | NavFn 邻近端点容差 | `0.05 m` | `0.0 m` |
-| 平移/yaw 速度上限 | `0.25 m/s/0.5 rad/s`，不生成横移 | `0.12 m/s/0.35 rad/s`，允许机体 X/Y 双向调整 |
+| 平移/yaw 速度上限 | `0.25 m/s/0.5 rad/s`，不生成横移 | `0.12 m/s/0.35 rad/s`，通过前后与转向调整，禁止横移 |
 
 接近 Goal Checker 的 `stateful=false` 持续检查 XY，避免先到 XY 后调向漂移仍被判为成功。它检查当前速度，不能替代连续停稳窗口。Mission 默认在精确接近后连续停稳，再按 `0.10 m/0.10 rad` 验收普通点、返航和障碍入口。Nav2 的 `0.08` 与 Mission 的 `0.10` 留出停车漂移余量；出口使用路线独立配置，见 [Mission 说明](../robocon_mission/README.md)。估计 TF 的合格不能替代独立的实物对准测量。
 
-`FollowPathApproach` 使用 [PrecisionPoseCritic](src/precision_pose_critic.cpp)，连续计算机体 X/Y 和 yaw 的目标速度，同时纠正位置和朝向。距离超过 `goal_direct_radius=0.30 m` 时，使用路径前视 `path_lookahead=0.20 m`；靠近终点时直接使用精确终点。DWB 的 `BaseObstacle` 保留候选轨迹碰撞评分。该 controller 不使用巡航的 `RotateToGoal` 切换窗口。
+`FollowPathApproach` 使用 [PrecisionPoseCritic](src/precision_pose_critic.cpp)，实机模板设置 `PrecisionPose.holonomic=false`，通过转向与前后移动消除位置误差，再完成最终朝向对准；Y 方向速度为零。插件保留的默认 holonomic 模式仅供其他兼容使用方，不是本项目实机配置。距离超过 `goal_direct_radius=0.30 m` 时，使用路径前视 `path_lookahead=0.20 m`；靠近终点时直接使用精确终点。DWB 的 `BaseObstacle` 保留候选轨迹碰撞评分。该 controller 不使用巡航的 `RotateToGoal` 切换窗口。
 
 共享 `SimpleProgressChecker` 初值为 `required_movement_radius=0.05 m`、`movement_time_allowance=30 s`，只统计平移。较长时间原地调向仍可能触发进度超时，应记录实际转向收敛与停稳漂移后再调参。
 
@@ -54,7 +54,7 @@
 
 `config_dir` 可改为另一绝对目录。模板来源为 [go2_onboard_bringup/config](../../real/go2_onboard_bringup/config)，字段验证与生成见 [profile.py](../../real/go2_onboard_bringup/go2_onboard_bringup/profile.py)。全局 costmap 使用 `map`，局部 costmap 使用 `nav_odom`，机器人平面坐标为 `base_footprint`；身体姿态由独立 `base_link` TF 保留。
 
-当前机载诊断只启用 static/inflation costmap，动态点云转 scan 输出到 `/onboard/scan_diagnostic`，未宣称具备实机动态避障安全能力。Nav2 控制与行为节点输出先到 `/onboard/nav_cmd_internal`，velocity smoother 输出到 `/onboard/nav_cmd_raw`。该输出不进入机器人 `/cmd_vel`；真实 `Twist → MotionCommand` 的租约与代次绑定入口仍待实现。组合和 remap 见 [launching.py](../../real/go2_onboard_bringup/go2_onboard_bringup/launching.py)。
+当前机载诊断只启用 static/inflation costmap，动态点云转 scan 输出到 `/onboard/scan_diagnostic`，未宣称具备实机动态避障安全能力。Nav2 控制与行为节点输出先到 `/onboard/nav_cmd_internal`，velocity smoother 输出到 `/onboard/nav_cmd_raw`。该诊断入口本身不连接电机。独立 STM32 启动链已提供 `NavVelocityAdapter`，将新鲜 Twist 绑定当前 NAVIGATION 租约，交给 MotionArbiter，再通过 `/stm32/arbiter_command` 进入唯一串口网关；默认禁止运动。固件协议与真实状态仍需联调，见 [STM32 接入指南](../../docs/STM32_BRIDGE_GUIDE.md)。组合和 remap 见 [launching.py](../../real/go2_onboard_bringup/go2_onboard_bringup/launching.py)。
 
 ## 客户端和测试入口
 

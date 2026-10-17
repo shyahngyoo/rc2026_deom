@@ -42,7 +42,17 @@ GICP 发布原子证据，包含 accepted、测量时间、源身份、epoch / s
 
 包 `go2_mission_backends` 含状态适配、定位证据适配、控制权仲裁、越障 SPI 和 preflight；Mission FSM 在 `robocon_mission`。软件测试包含导航、停稳、精确到点验收、越障、出口独立定位验收、继续导航及返回，并覆盖异常状态流转。
 
-当前机载入口仅使用不涉及运动的适配器和 preflight。没有真实低层 `MotionTelemetry`、真实 `SkillExecutor` 与带 lease 的 Nav2 命令适配，所以不会启动整场任务。这与测试 backend_sim 的可运行闭环是不同入口；后者只用于软件验证。
+`real.launch.py` 只启动传感器、定位与隔离的规划诊断，不启动整场任务。独立 `stm32_bringup.launch.py` 已提供 `NavVelocityAdapter → MotionArbiter → SerialGateway` 的带租约输出链，以及 `STATUS → TelemetryAdapter → /motion/telemetry` 的反馈适配；默认不开串口、不允许运动，可显式配置真实 Hurricane 服务。STM32 固件协议、真实停稳/支撑反馈、技能能力与现场标定仍待接入和验收。Mission 需要另外配置预检查并手动启动，详见 [STM32 接入指南](STM32_BRIDGE_GUIDE.md)。测试 backend_sim 仅用于软件验证。
+
+```text
+/onboard/nav_cmd_raw → NavVelocityAdapter → /motion/nav_command
+Hurricane → /motion/skill_command → MotionArbiter
+MotionArbiter → /stm32/arbiter_command → SerialGateway → STM32
+Hurricane → /stm32/skill_request → SerialGateway
+STM32 STATUS → SerialGateway → TelemetryAdapter → /motion/telemetry
+```
+
+`/stm32/arbiter_command` 是带 owner/mission_id/generation 的最终 MotionCommand；普通 Twist 诊断输出不作为 UART 输入。定位、Nav2、通信和 Mission 是独立启动范围，不能把诊断入口的运动禁用状态理解为主机适配器不存在。
 
 关键源码：
 

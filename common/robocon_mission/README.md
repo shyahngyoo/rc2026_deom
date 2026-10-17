@@ -4,7 +4,7 @@ ROS 2 Humble 的上层任务调度器。Mission 负责路线、导航与越障 A
 
 本发布版的机载入口 `go2_onboard_bringup/real.launch.py` **不启动实机 Mission**。当前可部署范围为真实 MID-360 输入、FAST-LIO、GICP 定位、机器人状态适配、隔离的 Nav2 规划诊断和自检。安装与外部配置步骤见[根 README](../../README.md)，软件验证范围见[验证记录](../../docs/VALIDATION.md)。默认工作空间为 `~/rc2026_ws`。
 
-实机自动跑赛前仍须接入：真实底层 `MotionTelemetry` 与安全支撑反馈、真实越障执行器，以及将 Nav2 原始 `Twist` 绑定当前 `mission_id/generation` 后转换为 `MotionCommand` 的入口。软件仲裁器不能代替底层支撑控制或硬件急停；模拟状态和测试执行器不能用于替代实机反馈。
+主机侧已提供 NavVelocityAdapter、STM32 TelemetryAdapter 和 Hurricane 网关运输层，分别完成带租约速度适配、真实 STATUS 转换和越障请求关联。实机自动跑赛前仍须 STM32 实现协议、真实安全状态与技能执行，完成现场标定和联调；启动方式见 [STM32 接入指南](../../docs/STM32_BRIDGE_GUIDE.md)。软件仲裁器不能代替底层支撑控制或硬件急停；模拟状态和测试执行器不能用于替代实机反馈。
 
 ## FSM 与任务闭环
 
@@ -48,7 +48,7 @@ Skill 必须返回 Action `SUCCEEDED`，且 `completed=true`、`control_released
 | `/odom` | `nav_msgs/msg/Odometry` | 有效时间戳的运动测量与连续停稳检查 |
 | `map → base_footprint` | TF2 | 独立测得的全局平面位姿 |
 
-新后端另提供 `/motion/authority` 的 `MotionAuthority`，包含 `mission_id/generation`；仲裁输入 `MotionCommand` 必须匹配该会话和代次。真实底层反馈、最终命令路径及故障保护必须共同接入，不能只实现交接服务。机载规划诊断的原始速度保留在 `/onboard/nav_cmd_raw`，目前未接入这些受租约保护的命令输入。
+新后端另提供 `/motion/authority` 的 `MotionAuthority`，包含 `mission_id/generation`；仲裁输入 `MotionCommand` 必须匹配该会话和代次。真实底层反馈、最终命令路径及故障保护必须共同接入，不能只实现交接服务。机载规划诊断的原始速度保留在 `/onboard/nav_cmd_raw`，独立 `stm32_bringup.launch.py` 中的 NavVelocityAdapter 将其接入受租约保护的 `/motion/nav_command`，默认禁用运动。
 
 ## 参数与路线
 
@@ -96,7 +96,7 @@ ros2 topic echo /mission/startup_status
 
 ## Hurricane 障碍适配
 
-新增 Hurricane Unitree 指令编码、八类障碍技能模板、非阻塞 `/execute_obstacle` 服务和现场采点工具。使用方法与反馈契约见 [Hurricane 移植说明](HURRICANE_PORT.md)。默认 dry-run，模板需现场标定；本任务包保留现有 FSM、控制交接、独立运动状态、定位与出口验收流程。
+提供 Hurricane 八类障碍技能模板、非阻塞 `/execute_obstacle` 服务和现场采点工具。真实执行通过共享 STM32 网关；旧指令编码仅保留用于兼容与测试。使用方法与反馈契约见 [Hurricane 移植说明](HURRICANE_PORT.md)。默认 dry-run，模板需现场标定；本任务包保留现有 FSM、控制交接、独立运动状态、定位与出口验收流程。Hurricane 实机路径与通用 obstacle_adapter 是不同执行后端，不能同时提供 `/execute_obstacle`。
 
 ## 验证范围
 

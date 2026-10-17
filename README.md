@@ -50,10 +50,12 @@ bash tools/install_real.bash --jobs 2
 | [现场操作卡](docs/REAL_ROBOT_QUICK_REFERENCE.md) | 配置完成后的日常开机、检查和退出 |
 | [实机排错表](docs/TROUBLESHOOTING.md) | 看到错误或数据不符合预期时 |
 | [部署与建图细节](docs/DEPLOYMENT.md) | 地图、网络、DDS、工作空间的补充说明 |
+| [STM32 Host UART v1 规范](docs/STM32_HOST_PROTOCOL_V1.md) | 固件协议字段、收发时序、安全状态及待双方确认事项 |
 | [控制与底层接入](docs/CONTROL_INTEGRATION.md) | 电控、导航与技能团队对接真实接口 |
 | [Hurricane 移植与协议](common/robocon_mission/HURRICANE_PORT.md) | 串口帧、八类技能、采点和反馈契约 |
 | [系统结构](docs/ARCHITECTURE.md) | 定位、TF、状态适配和后端模块关系 |
 | [Mission](common/robocon_mission/README.md) / [导航 BT](common/go2_nav_bringup/NAV2_BT.md) | 路线、任务状态流转、精确接近与恢复 |
-| [软件验证记录](docs/VALIDATION.md) | 已执行检查及其边界；不替代实机验收 |
+| [STM32 软件验证记录](docs/STM32_BRIDGE_VALIDATION.md) | 最新接入验证、未通过项及硬件验证边界 |
+| [历史软件验证记录](docs/VALIDATION.md) | 早期发布记录，不代替当前完整验收 |
 
 软件回归按验证记录执行。源码固定依赖见 [dependencies.repos](dependencies.repos) 与 [dependencies.lock.yaml](dependencies.lock.yaml)，版权说明见 [NOTICE.md](NOTICE.md)。

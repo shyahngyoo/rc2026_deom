@@ -17,9 +17,9 @@ bash src/rc2026_deom/tools/verify_real.bash
 
 验证使用独立 localhost ROS domain、CycloneDDS 分片 profile 和受控 /clock。完整 backend_simulation 是软件验证入口：运行模拟 NavigateToPose、运动积分底层和模拟证据流。真实 GICP 另用完整1800点合成点云做独立 C++ 跨进程验证。工具不启动真实雷达、SDK 或电机。
 
-默认不收集旧 Gazebo 专用 test_simulation_launch 模块，保留迁移到 test/fixtures 的巡航路线和地图测试。额外 wall_clock 完整闭环案例通过 --include-wall-clock 开启；默认受控时钟路径仍完整执行任务，时钟停止/回退的拒绝路径仍检查。历史开发环境成绩不作为新安装机器的验收结果。
+旧 Gazebo 运行入口已清理，相关测试已调整为适用的启动契约与回归检查；保留 test/fixtures 中的巡航路线和地图，当前验证脚本不再忽略该历史 launch 测试模块。额外 wall_clock 完整闭环案例通过 --include-wall-clock 开启；默认受控时钟路径仍完整执行任务，时钟停止/回退的拒绝路径仍检查。历史开发环境成绩不作为新安装机器的验收结果。
 
-实机配置入口见仓库根 README 与 go2_onboard_bringup。当前实机阶段低层状态与真实技能尚未接入，启动检查保留 NOT_READY；Nav2 规划输出保持在私有诊断话题。backend_simulation 不能作为实机部署入口。
+实机配置入口见仓库根 README 与 go2_onboard_bringup。`real.launch.py` 保留 NOT_READY 诊断边界；独立 STM32 桥接入口已提供导航命令和真实 STATUS 适配，默认禁用运动。固件端状态与技能仍待实现和联调，见 [STM32 指南](../../docs/STM32_BRIDGE_GUIDE.md)。backend_simulation 不能作为实机部署入口。
 
 ## 节点与接口
 
@@ -27,7 +27,7 @@ bash src/rc2026_deom/tools/verify_real.bash
 |---|---|---|
 | robot_state_adapter | /Odometry、测量时刻的 map→odom、已测量安装外参 | /odom、独立导航 TF 分支、/robot_state/status |
 | localization_adapter | /gicp/evidence | /localization/evidence、Trigger /mission/localization_ok |
-| motion_arbiter | 带身份的 nav/skill command、MotionTelemetry、/odom | authority、control_state、运动状态查询和紧急门控；隔离测试最终速度 |
+| motion_arbiter | 带身份的 nav/skill command、MotionTelemetry、/odom | authority、control_state、运动状态查询和紧急门控；按配置输出测试 Twist 或实机带授权 MotionCommand |
 | obstacle_adapter | ExecuteObstacle、技能配置、authority、独立底层状态 | Action feedback/result、/skills/ready、带租约身份的技能输入 |
 | preflight | 定位、TF、状态、控制权、导航和技能接口、路线 | Trigger /mission/preflight |
 | simulation_backend | 隔离测试最终 Twist、技能事件、控制权 | 测试运动积分、IMU odom/TF、底层反馈、证据流、NavigateToPose、/clock |
@@ -43,6 +43,7 @@ MotionCommand 包含 owner、mission_id、generation 和时间戳。发送者必
 - config/cyclonedds_sim.xml：软件验证进程的 UDP 消息1200 B、数据分片1100 B。保持完整 ROS 点云，不修改用户全局 DDS 或内核。
 - config/robot_state.yaml：外参、速度坐标系、状态年龄和协方差。默认 identity 与模拟值均是示例；实机通过已测量的外部 profile 提供。
 - config/localization.yaml：source pinning、ROS/单调时间年龄、未来时间和时钟停止检查。
+- config/arbiter_real.yaml：STM32 实机仲裁配置，默认关闭输出，最终带授权命令为 `/stm32/arbiter_command`。
 - config/arbiter.yaml：隔离测试输出、速度限制、命令/状态超时和停稳标准。该文件是验证配置，参数未标定实机。
 - config/test_skills.yaml、backend_test_route.yaml、simulation.yaml：软件验证的技能、两个入口/出口分离的障碍和返航路线、受控时钟 Mission 配置。
 - config/preflight.yaml：状态、接口、路线、唯一输出发布者和可选 Nav2 lifecycle 检查。实机规划阶段采用 onboarding 配置。
@@ -53,11 +54,11 @@ MotionCommand 包含 owner、mission_id、generation 和时间戳。发送者必
 
 GICP 原子发布一次匹配的测量时间、source、epoch、sequence、accepted 和 pose。adapter 不通过 Bool 与独立 Pose 拼接证据。拒绝、乱序、过期或时钟故障清除 accepted；恢复和阶段推进必须等待新的测量。详见 docs/LOCALIZATION_EVIDENCE.md。
 
-新 Mission 链路设置 accepted_pose_type=evidence、accepted_pose_topic=/localization/evidence、accepted_pose_body_frame=livox_frame、startup_check_service=/mission/preflight。GICP 重启产生新 source，需要停止任务并显式重启对应 adapter/Mission；同一健康服务不能有多个不一致后端。
+新 Mission 链路设置 accepted_pose_type=evidence、accepted_pose_topic=/localization/evidence、accepted_pose_body_frame=livox_frame、startup_check_service 指向实际生产预检查服务；STM32 指南使用 `/stm32/preflight`，原机载 `/mission/preflight` 保留诊断禁止运动边界。GICP 重启产生新 source，需要停止任务并显式重启对应 adapter/Mission；同一健康服务不能有多个不一致后端。
 
-越障团队实现 SkillExecutor 的 start/tick/cancel/close，并以 executor_factories 注册真实后端。所有命令仍经 MotionCommand 仲裁，cancel/close 确认需要真实执行器与独立底层状态。只有明确 simulation_mode=true 才允许测试 executor；硬件模式未配置后端时返回 NOT_CONFIGURED。Action 成功仍需独立安全释放和新出口定位，未确认取消、未知支撑和释放失败均禁止恢复导航。详见 docs/SKILL_EXECUTOR_ADAPTER.md。
+通用 obstacle_adapter 的扩展方式是实现 SkillExecutor 的 start/tick/cancel/close，并以 executor_factories 注册后端。当前 STM32/Hurricane 路径使用独立 hurricane_skill_server 和共享网关，不要求再实现或启动第二套 Action 后端。该通用 SPI 的运动命令仍经 MotionCommand 仲裁，cancel/close 确认需要真实执行器与独立底层状态。只有明确 simulation_mode=true 才允许测试 executor；硬件模式未配置后端时返回 NOT_CONFIGURED。Action 成功仍需独立安全释放和新出口定位，未确认取消、未知支撑和释放失败均禁止恢复导航。详见 docs/SKILL_EXECUTOR_ADAPTER.md。
 
-固定地图初猜沿用真实 GICP，尚未提供全局候选搜索式重定位。实际 Nav2 Twist 到带 generation/session 的控制输入、真实 MotionTelemetry 和技能 executor 是后续实机接入工作；当前软件验证不代表真实运动或定位精度验收。
+固定地图初猜沿用真实 GICP，尚未提供全局候选搜索式重定位。主机已有 NavVelocityAdapter、TelemetryAdapter 与 Hurricane 网关运输层；尚需 STM32 提供真实协议执行与安全状态，并确认取消/完成关联。当前软件验证不代表真实运动或定位精度验收；最新测试通过项和未通过项见 [STM32 验证报告](../../docs/STM32_BRIDGE_VALIDATION.md)。
 
 
 `rely-only` 保留 `simulation_backend` 与 `backend_simulation.launch.py`，供独立的软件安全回归使用；它们不被机载 real.launch 或正式 mission.launch 包含。测试后端的 `simulation_mode` 防护和 `/backend_sim/cmd_vel` 隔离输出保持不变，不能用测试状态替代 STM32 真实反馈。
