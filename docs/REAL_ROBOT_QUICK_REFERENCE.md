@@ -10,12 +10,12 @@
 ```bash
 source /opt/ros/humble/setup.bash
 source "$HOME/rc2026_ws/install/setup.bash"
-export PYTHONNOUSERSITE=1 RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-export ROS_DOMAIN_ID=42 ROS_LOCALHOST_ONLY=1
-export CYCLONEDDS_URI="file://$(ros2 pkg prefix go2_mission_backends)/share/go2_mission_backends/config/cyclonedds_sim.xml"
 ```
 
-如现场另有约定 domain，所有终端一致替换 42。检查网卡、地图、安装状态与当前 IMU 初猜是否符合实际；改变起点后不能沿用旧初猜。
+编译包含环境钩子的新版 `go2_real_bringup` 后，上面两行会自动设置默认环境：`PYTHONNOUSERSITE=1`、`RMW_IMPLEMENTATION=rmw_cyclonedds_cpp`、`ROS_DOMAIN_ID=42`、`ROS_LOCALHOST_ONLY=1`，并按实际安装位置生成 `CYCLONEDDS_URI`。每个终端只需加载一次。除 `ROS_LOCALHOST_ONLY` 外，已有的非空环境变量会保留。Humble 本身会设置 `ROS_LOCALHOST_ONLY=0`，因此本项目默认将它设为 `1`；跨电脑通信时，在加载前设置 `export RC2026_ROS_LOCALHOST_ONLY=0`，并按网络情况指定 DDS 配置。不要修改构建生成的 `install/setup.bash`。
+
+
+如现场另有约定 domain，在所有终端加载前一致设置 `export ROS_DOMAIN_ID=所需编号`。检查网卡、地图、安装状态与当前 IMU 初猜是否符合实际；改变起点后不能沿用旧初猜。
 
 ## 2. 终端 A 选择一个主模式
 

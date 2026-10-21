@@ -5,6 +5,8 @@
   <maintainer email="icecream127@users.noreply.github.com">icecream127</maintainer>
   <license>BSD-3-Clause</license>
   <buildtool_depend>ament_cmake</buildtool_depend>
+  <exec_depend>go2_mission_backends</exec_depend>
+  <exec_depend>rmw_cyclonedds_cpp</exec_depend>
   <exec_depend>ament_index_python</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
