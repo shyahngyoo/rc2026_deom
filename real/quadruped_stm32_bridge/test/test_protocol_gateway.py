@@ -427,3 +427,86 @@ def test_legal_bytewise_fragmentation_is_not_a_protocol_error():
     for value in packet:
         decoded.extend(parser.feed(bytes([value])))
     assert len(decoded)==1 and parser.errors==0
+
+
+@pytest.mark.parametrize('sent', [False, True])
+@pytest.mark.parametrize('owner', ['SAFE_HOLD', 'NAVIGATION', 'SKILL'])
+def test_authority_updates_preserve_hello_transaction(sent, owner):
+    core = GatewayCore()
+    core.connect(0)
+    peer = Controller(core)
+    hello = frames(core)[0] if sent else None
+    core.set_authority(owner, 'mission', 1, 5, True, .01)
+    if not sent:
+        hello, = frames(core, .02)
+    peer.ack(hello, .03, protocol_version=1, features=sorted(BASE_FEATURES))
+    assert core.handshake
+    assert not any(e['error_code'] == 'UNMATCHED_ACK' for e in core.pop_events())
+
+
+def test_authority_updates_do_not_reset_hello_retry_budget():
+    core = GatewayCore()
+    core.connect(0)
+    original, = core.outgoing(0)
+    for generation, now in enumerate((.16, .32), 1):
+        core.set_authority('SAFE_HOLD', '', generation, 0, True, now)
+        core.tick(now)
+        assert core.outgoing(now) == [original]
+    core.set_authority('SAFE_HOLD', '', 3, 0, True, .48)
+    core.tick(.48)
+    assert not core.connected
+    assert any(e['error_code'] == 'ACK_TIMEOUT' for e in core.pop_events())
+
+
+@pytest.mark.parametrize('fault', [dict(human_enable=False), dict(estop=True),
+                                  dict(known=False), dict(fault_code='MOTOR_FAULT')])
+def test_repeated_fault_status_preserves_hold_retry_budget(fault):
+    core, peer = ready()
+    packets = []
+    for i in range(1, 21):
+        now = i * .05
+        peer.status(now, **fault)
+        core.tick(now)
+        packets.extend(core.outgoing(now))
+    assert len(packets) == 1 + core.config['max_ack_retries']
+    assert all(packet == packets[0] for packet in packets)
+    assert core.hold_pending
+    timeouts = [e for e in core.pop_events() if e['error_code'] == 'ACK_TIMEOUT']
+    assert len(timeouts) == 1 and timeouts[0]['command_type'] == int(T.HOLD)
+
+
+def test_changed_fault_and_authority_preserve_hold_and_delayed_ack():
+    core, peer = ready()
+    peer.status(.01, human_enable=False)
+    hold, = frames(core, .01)
+    metadata = dict(core.hold_metadata)
+    peer.status(.02, estop=True)
+    core.set_authority('NAVIGATION', 'mission', 2, 5, True, .03)
+    assert frames(core, .03) == []
+    assert core.hold_metadata == metadata
+    core.tick(.18)  # Queue a retry; ACK arrives before it is transmitted.
+    peer.ack(hold, .19)
+    assert frames(core, .19) == []
+    assert core.hold_pending  # ACK alone cannot establish a safe measured stop.
+    peer.status(.20, estop=True)
+    assert core.hold_pending and frames(core, .20) == []
+    peer.status(.21)
+    assert not core.hold_pending
+    assert not any(e['error_code'] == 'UNMATCHED_ACK' for e in core.pop_events())
+
+
+def test_reconnect_discards_old_safety_transactions():
+    core, peer = ready()
+    peer.status(.01, human_enable=False)
+    hold, = frames(core, .01)
+    old_session = core.session
+    core.disconnect('TEST_DISCONNECT', .02)
+    assert not core.queue and not core.pending and not core.hold_pending
+    core.connect(.03)
+    hello, = frames(core, .03)
+    assert hello.kind == T.HELLO and core.session != old_session
+    peer.send(T.ACK, dict(acked_sequence=hold.sequence, acked_type=int(T.HOLD),
+                         accepted=True), .04, session=old_session)
+    assert not core.handshake
+    peer.ack(hello, .05, protocol_version=1, features=sorted(BASE_FEATURES))
+    assert core.handshake

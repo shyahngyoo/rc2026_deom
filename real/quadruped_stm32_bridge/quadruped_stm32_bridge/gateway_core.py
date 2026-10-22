@@ -107,24 +107,37 @@ class GatewayCore:
         self.parser.reset()
         self.event(reason, event='link_lost')
 
+    def _retain_safety_transactions(self):
+        # Authority changes revoke motion, not the link handshake or an ongoing
+        # safe-stop transaction. Keep the original packet, sequence and retries.
+        keep = (T.HELLO, T.HOLD)
+        self.queue = deque(item for item in self.queue if item['kind'] in keep)
+        self.pending = {seq: item for seq, item in self.pending.items()
+                        if item['kind'] in keep}
+
     def _fence(self, reason, now, send_hold=True):
         self.fenced_generation = max(self.fenced_generation, self.max_generation)
         if self.nav_key and self.nav_key not in self.blocked_nav_keys:
             self.blocked_nav_keys.append(self.nav_key)
         self.nav_active = False
-        self.queue.clear()
-        self.pending.clear()
+        if send_hold:
+            self._retain_safety_transactions()
+        else:
+            # Disconnect, a new session and explicit STOP must discard old work.
+            self.queue.clear()
+            self.pending.clear()
+            self.hold_pending = False
+            self.hold_metadata = None
         self.mode_requested = None
         self.pending_mode_intent = None
-        self.hold_pending = False
-        self.hold_metadata = None
         self.last_velocity_at = None
         if self.deferred_skill:
             self.event(reason, event='rejected', **self.deferred_skill)
         self.deferred_skill = None
         self.active_skill = None
         self.ending_skill_request = None
-        if send_hold and self.connected and self.handshake and self.motion_enabled and 'HOLD' in self.features:
+        if (send_hold and not self.hold_pending and self.connected and self.handshake
+                and self.motion_enabled and 'HOLD' in self.features):
             self._enqueue(T.HOLD, dict(reason=reason), now, safety=True)
         self._fence_reason = reason
 
@@ -150,8 +163,7 @@ class GatewayCore:
                 self._fence('SAFE_HOLD_AUTHORITY', now)
             return True
         if previous != token:
-            self.queue.clear()
-            self.pending.clear()
+            self._retain_safety_transactions()
             self.mode_requested = None
             self.pending_mode_intent = None
             self.last_velocity_at = None
@@ -425,6 +437,10 @@ class GatewayCore:
                                    all(status.get(k) == self.hold_metadata.get(k) for k in
                                        ('request_id', 'runner_session', 'obstacle_id', 'step_index')))
                 if (self.hold_pending and hold_correlated and status['mode'] == 'HOLD'
+                        and status['known'] and status['human_enable']
+                        and not status['estop'] and not status['fault_code']
+                        and not any(item['kind'] == T.HOLD for item in self.queue)
+                        and not any(item['kind'] == T.HOLD for item in self.pending.values())
                         and status['stopped'] and status['safe_stance'] and status['control_releasable']
                         and not status['nav_active'] and not status['skill_active']):
                     self.hold_pending = False
@@ -465,6 +481,8 @@ class GatewayCore:
             self.event('UNMATCHED_ACK', event='ignored')
             return
         del self.pending[seq]
+        # A retry can be queued by tick before this ACK arrives.
+        self.queue = deque(item for item in self.queue if item['sequence'] != seq)
         accepted = payload['accepted']
         if item['kind'] == T.HELLO:
             features = payload.get('features')
