@@ -510,3 +510,140 @@ def test_reconnect_discards_old_safety_transactions():
     assert not core.handshake
     peer.ack(hello, .05, protocol_version=1, features=sorted(BASE_FEATURES))
     assert core.handshake
+
+
+def test_skill_start_waits_for_measured_active_skill_mode():
+    core, peer = ready()
+    authorize(core, 'SKILL')
+    assert core.skill_request(request('wait-mode'), .01)
+    mode, = frames(core, .01)
+    peer.ack(mode, .02)
+    peer.status(.03, mode='SKILL', skill_active=False)
+    core.tick(.03)
+    assert frames(core, .03) == []
+    assert core.deferred_skill and core.active_skill is None
+    peer.status(.04, mode='SKILL', skill_active=True)
+    start, = frames(core, .04)
+    assert start.kind == T.SKILL_START
+    assert start.payload['request_id'] == 'wait-mode'
+    assert core.deferred_skill is None and core.active_skill
+    peer.ack(start, .05)
+    peer.status(.06, mode='SKILL', skill_active=True)
+    assert frames(core, .06) == []
+
+
+def test_expired_navigation_mode_fails_old_goal_and_allows_new_authorized_goal():
+    core, peer = ready()
+    authorize(core)
+    core.nav_goal(True, 'stale-goal', .01)
+    peer.status(.32)
+    authorize(core, now=.32)
+    assert frames(core, .32) == []
+    assert core.mode_requested is None and not core.nav_active
+    assert 'stale-goal' in core.blocked_nav_keys
+    assert core.fenced_generation == 2
+    hold, = frames(core, .32)
+    assert hold.kind == T.HOLD
+    peer.ack(hold, .33)
+    peer.status(.34)
+    core.nav_goal(True, 'stale-goal', .34)
+    core.tick(.34)
+    assert frames(core, .34) == []
+    authorize(core, generation=3, now=.35)
+    core.nav_goal(True, 'new-goal', .35)
+    mode, = frames(core, .35)
+    assert mode.kind == T.SET_MODE and mode.payload['generation'] == 3
+
+
+@pytest.mark.parametrize('command_id', [2, 6])
+def test_expired_skill_mode_reports_correlated_failure(command_id):
+    core, peer = ready()
+    authorize(core, 'SKILL')
+    r = request('stale-mode', command_id=command_id)
+    assert core.skill_request(r, .01)
+    peer.status(.32)
+    authorize(core, 'SKILL', now=.32)
+    assert frames(core, .32) == []
+    assert core.mode_requested is None and core.pending_mode_intent is None
+    assert core.deferred_skill is None and core.active_skill is None
+    rejected = [event for event in core.pop_events()
+                if event.get('request_id') == r['request_id'] and event['event'] == 'rejected']
+    assert len(rejected) == 1
+    assert rejected[0]['error_code'] == 'COMMAND_QUEUE_STALE'
+    for key in ('runner_session', 'obstacle_id', 'step_index'):
+        assert rejected[0][key] == r[key]
+    hold, = frames(core, .32)
+    assert hold.kind == T.HOLD
+
+
+@pytest.mark.parametrize('sent', [False, True])
+def test_expired_skill_start_clears_busy_state_without_replaying_old_request(sent):
+    core, peer = ready()
+    skill_mode(core, peer)
+    r = request('stale-start')
+    assert core.skill_request(r, .03)
+    if sent:
+        original, = core.outgoing(.03)
+        core.tick(.19)
+        assert core.outgoing(.19) == [original]  # Still inside the command TTL.
+    peer.status(.35, mode='SKILL', skill_active=True)
+    authorize(core, 'SKILL', now=.35)
+    core.tick(.35)
+    assert frames(core, .35) == []
+    assert core.active_skill is None and core.deferred_skill is None
+    assert core.mode_requested is None and core.pending_mode_intent is None
+    assert all(item['kind'] == T.HOLD for item in core.pending.values())
+    failures = [event for event in core.pop_events()
+                if event.get('request_id') == 'stale-start' and event['event'] == 'rejected']
+    assert len(failures) == 1 and failures[0]['error_code'] == 'COMMAND_QUEUE_STALE'
+    hold, = frames(core, .35)
+    assert hold.kind == T.HOLD
+    peer.ack(hold, .36)
+    peer.status(.37)
+    authorize(core, 'SKILL', generation=3, now=.38)
+    assert not core.skill_request(dict(r, generation=3), .38)
+    assert core.skill_request(dict(request('new-start'), generation=3), .39)
+    mode, = frames(core, .39)
+    assert mode.kind == T.SET_MODE
+    peer.ack(mode, .40)
+    peer.status(.41, mode='SKILL', skill_active=True)
+    start, = frames(core, .41)
+    assert start.kind == T.SKILL_START and start.payload['request_id'] == 'new-start'
+
+
+def test_direction_mode_retry_expiry_keeps_request_correlation_after_activation():
+    core, peer = ready()
+    authorize(core, 'SKILL')
+    assert core.skill_request(request('direction-retry', command_id=2), .01)
+    mode_packet, = core.outgoing(.01)
+    peer.status(.02, mode='SKILL', skill_active=True)
+    core.tick(.17)
+    assert core.outgoing(.17) == [mode_packet]
+    peer.status(.33, mode='SKILL', skill_active=True)
+    authorize(core, 'SKILL', now=.33)
+    core.tick(.33)
+    assert frames(core, .33) == []
+    failures = [event for event in core.pop_events()
+                if event.get('request_id') == 'direction-retry' and event.get('error_code')]
+    assert len(failures) == 1 and failures[0]['error_code'] == 'COMMAND_QUEUE_STALE'
+    assert core.pending_mode_intent is None
+    hold, = frames(core, .33)
+    assert hold.kind == T.HOLD
+
+
+@pytest.mark.parametrize('failure', ['rejected', 'timeout'])
+def test_skill_ack_failure_notifies_task_once(failure):
+    core, peer = ready(command_timeout=1.0, max_ack_retries=0)
+    skill_mode(core, peer)
+    assert core.skill_request(request('ack-failure'), .03)
+    start, = frames(core, .03)
+    if failure == 'rejected':
+        peer.ack(start, .04, accepted=False, reason='SKILL_FAILED')
+    else:
+        core.tick(.19)
+    failures = [event for event in core.pop_events()
+                if event.get('request_id') == 'ack-failure' and event.get('error_code')]
+    assert len(failures) == 1
+    assert core.active_skill is None
+    hold, = frames(core, .20)
+    assert hold.kind == T.HOLD

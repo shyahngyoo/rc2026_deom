@@ -115,7 +115,14 @@ class GatewayCore:
         self.pending = {seq: item for seq, item in self.pending.items()
                         if item['kind'] in keep}
 
-    def _fence(self, reason, now, send_hold=True):
+    def _fence(self, reason, now, send_hold=True, notified_request_id=None):
+        requests = (self.deferred_skill, self.active_skill,
+                    self.pending_mode_intent['request'] if self.pending_mode_intent else None)
+        notified = {notified_request_id} if notified_request_id else set()
+        for request in requests:
+            if request and request['request_id'] not in notified:
+                self.event(reason, event='rejected', **request)
+                notified.add(request['request_id'])
         self.fenced_generation = max(self.fenced_generation, self.max_generation)
         if self.nav_key and self.nav_key not in self.blocked_nav_keys:
             self.blocked_nav_keys.append(self.nav_key)
@@ -131,8 +138,6 @@ class GatewayCore:
         self.mode_requested = None
         self.pending_mode_intent = None
         self.last_velocity_at = None
-        if self.deferred_skill:
-            self.event(reason, event='rejected', **self.deferred_skill)
         self.deferred_skill = None
         self.active_skill = None
         self.ending_skill_request = None
@@ -354,7 +359,7 @@ class GatewayCore:
         if command > 5 and (command not in self.status['capabilities'] or 'SKILL_START' not in self.features):
             self.event('UNSUPPORTED', event='rejected', **fields)
             return False
-        self.pending_mode_intent = self.authority[:3]
+        self.pending_mode_intent = dict(token=self.authority[:3], request=dict(fields))
         self._ensure_mode('SKILL', now)
         if command <= 4:
             self.event('', event='mode_requested', **fields)
@@ -367,13 +372,18 @@ class GatewayCore:
         return True
 
     def _try_skill(self, now):
-        if self.pending_mode_intent and self.authority and self.pending_mode_intent == self.authority[:3]:
-            if self._ensure_mode('SKILL', now):
+        if (self.pending_mode_intent and self.authority
+                and self.pending_mode_intent['token'] == self.authority[:3]):
+            if (self._ensure_mode('SKILL', now)
+                    and not any(item['kind'] == T.SET_MODE for item in self.queue)
+                    and not any(item['kind'] == T.SET_MODE for item in self.pending.values())):
+                # Keep request correlation until both measured activation and
+                # mode ACK arrive, including retries after activation.
                 self.pending_mode_intent = None
         if self.hold_pending:
             return
         if (self.deferred_skill and self._safe_motion('SKILL', now)
-                and self.status['mode'] == 'SKILL'):
+                and self.status['mode'] == 'SKILL' and self.status['skill_active']):
             self.active_skill = dict(self.deferred_skill)
             self._enqueue(T.SKILL_START, dict(self.active_skill, owner='SKILL',
                                             mission_id=self.authority[1], generation=self.authority[2],
@@ -404,7 +414,13 @@ class GatewayCore:
                 continue
             if q['token'] is not None:
                 if now - q['created_at'] > self.config['command_timeout']:
+                    if q['kind'] in (T.SET_MODE, T.SKILL_START):
+                        # Execution may be unknown for an expired retry. Revoke
+                        # the task instead of replaying it or leaving it busy.
+                        self._fence('COMMAND_QUEUE_STALE', now)
                     self.event('COMMAND_QUEUE_STALE', event='rejected', command_type=int(q['kind']))
+                    if q['kind'] in (T.SET_MODE, T.SKILL_START):
+                        break
                     continue
                 if (not self.authority or q['token'] != self.authority[:3]
                         or not self._safe_motion(q['token'][0], now)):
@@ -500,7 +516,8 @@ class GatewayCore:
         self.event('' if accepted else str(payload.get('reason', 'CONTROLLER_REJECTED')),
                    event='ack', accepted=accepted, command_type=int(item['kind']), **metadata)
         if not accepted and item['kind'] != T.HELLO:
-            self._fence('CONTROLLER_REJECTED', now, send_hold=item['kind'] != T.HOLD)
+            self._fence('CONTROLLER_REJECTED', now, send_hold=item['kind'] != T.HOLD,
+                        notified_request_id=metadata.get('request_id'))
             if item['kind'] == T.HOLD:
                 self.handshake = False
                 self.error_code = 'HOLD_UNSUPPORTED_OR_REJECTED'
@@ -532,7 +549,7 @@ class GatewayCore:
                 if item['kind'] == T.HELLO:
                     self.disconnect('HANDSHAKE_TIMEOUT', now)
                 elif item['kind'] != T.HOLD:
-                    self._fence('ACK_TIMEOUT', now)
+                    self._fence('ACK_TIMEOUT', now, notified_request_id=metadata.get('request_id'))
                 break
             item['retries'] += 1
             item['sent_at'] = now
