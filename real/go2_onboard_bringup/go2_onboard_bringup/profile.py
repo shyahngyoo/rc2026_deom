@@ -95,9 +95,15 @@ def validate_profile(profile,mode='lidar'):
     if profile.get('motion_output_enabled') is not False or profile.get('mission_autostart') is not False:
         raise ValueError('this profile cannot authorize motors or Mission autostart')
     if profile.get('nav_output_topic')!='/onboard/nav_cmd_raw':raise ValueError('Nav2 output must remain isolated')
+    source=profile.get('localization_source','gicp')
+    if source not in ('gicp','odometry'):raise ValueError('unsupported localization_source')
+    if source=='odometry':
+        vector(profile.get('odom_in_map'),6,'measured odom_in_map XYZ/RPY')
+        if profile.get('map_pcd') is not None or profile.get('initial_pose') is not None:
+            raise ValueError('odometry mode uses odom_in_map, not GICP map_pcd/initial_pose')
     if profile.get('map_pcd') is not None:pcd_map(profile['map_pcd'])
     if profile.get('initial_pose') is not None:vector(profile['initial_pose'],6,'initial_pose IMU in map')
-    if mode in ('localization','navigation'):
+    if mode in ('localization','navigation') and source=='gicp':
         pcd_map(profile.get('map_pcd'));vector(profile.get('initial_pose'),6,'measured initial_pose IMU in map')
     if profile.get('footprint') is not None:footprint(profile['footprint'])
     if profile.get('nav_map') is not None:navigation_map(profile['nav_map'])
@@ -141,10 +147,11 @@ def load_profile(config_dir,mode='lidar'):
     if (gicp.get('map_frame')!='map' or gicp.get('odom_frame')!='odom' or gicp.get('body_frame')!='livox_frame' or
         gicp.get('odom_topic')!='/Odometry' or gicp.get('cloud_topic')!='/cloud_registered_body'):
         raise ValueError('GICP source frame/topic mismatch')
-    if mode in ('localization','navigation') and (gicp.get('initial_pose_enabled') is not True or gicp.get('initial_pose')!=profile['initial_pose']):
+    if profile.get('localization_source','gicp')=='gicp' and mode in ('localization','navigation') and (gicp.get('initial_pose_enabled') is not True or gicp.get('initial_pose')!=profile['initial_pose']):
         raise ValueError('GICP initialization must use the measured fixed-start pose')
     local=params['localization.yaml']['localization_evidence_adapter']['ros__parameters']
-    if local.get('map_frame')!='map' or local.get('body_frame')!='livox_frame' or local.get('input_topic')!='/gicp/evidence' or local.get('output_topic')!='/localization/evidence' or local.get('health_service')!='/mission/localization_ok':
+    evidence_topic='/odometry/evidence' if profile.get('localization_source')=='odometry' else '/gicp/evidence'
+    if local.get('map_frame')!='map' or local.get('body_frame')!='livox_frame' or local.get('input_topic')!=evidence_topic or local.get('output_topic')!='/localization/evidence' or local.get('health_service')!='/mission/localization_ok':
         raise ValueError('localization atomic evidence/frame mismatch')
     if mode=='navigation':
         nav=params['nav2.yaml'];expected=json.dumps(profile['footprint'])
@@ -165,12 +172,13 @@ def template_directory():
     return Path(get_package_share_directory('go2_onboard_bringup'))/'config'
 
 
-def create_profile(config_dir,host_ip,lidar_ip,imu_in_base,stage='sensor_only',map_pcd=None,initial_pose=None,nav_map=None,measured_footprint=None,force=False):
+def create_profile(config_dir,host_ip,lidar_ip,imu_in_base,stage='sensor_only',map_pcd=None,initial_pose=None,nav_map=None,measured_footprint=None,force=False,localization_source='gicp',odom_in_map=None):
     if stage not in ('sensor_only','localization'):raise ValueError('stage must be sensor_only or localization')
     ext=vector(imu_in_base,6,'imu_in_base XYZ/RPY')
     profile=dict(schema_version=1,host_ip=host_ip,lidar_ip=lidar_ip,
         imu_in_base=dict(xyz=ext[:3],rpy=ext[3:]),frames=FRAMES.copy(),map_pcd=map_pcd,
         initial_pose=initial_pose,nav_map=nav_map,footprint=measured_footprint,
+        localization_source=localization_source,odom_in_map=odom_in_map,
         use_sim_time=False,motion_output_enabled=False,mission_autostart=False,nav_output_topic='/onboard/nav_cmd_raw')
     validate_profile(profile,'localization' if stage=='localization' else 'lidar')
     folder=Path(config_dir).expanduser().resolve()
@@ -181,6 +189,9 @@ def create_profile(config_dir,host_ip,lidar_ip,imu_in_base,stage='sensor_only',m
     gicp=documents['gicp.yaml']['gicp_localizer']['ros__parameters']
     gicp['initial_pose_enabled']=initial_pose is not None
     gicp['initial_pose']=initial_pose if initial_pose is not None else [0.]*6
+    if localization_source=='odometry':
+        local=documents['localization.yaml']['localization_evidence_adapter']['ros__parameters']
+        local.update(input_topic='/odometry/evidence',evidence_max_age=.5)
     state=documents['robot_state.yaml']['robot_state_adapter']['ros__parameters']
     state.update(imu_in_base_xyz=ext[:3],imu_in_base_rpy=ext[3:])
     for doc in documents.values():
@@ -193,7 +204,7 @@ def create_profile(config_dir,host_ip,lidar_ip,imu_in_base,stage='sensor_only',m
     if measured_footprint is not None:
         for key in ['local_costmap','global_costmap']:
             documents['nav2.yaml'][key][key]['ros__parameters']['footprint']=json.dumps(measured_footprint)
-    pose=initial_pose or [0.]*6
+    pose=odom_in_map if localization_source=='odometry' else initial_pose or [0.]*6
     documents['preflight_route.yaml']=dict(start_area='readiness_only_not_executed',frame_id='map',
         route=[dict(id='diagnostic_only',type='navigation',pose=[pose[0],pose[1],pose[5]])],
         return_=None)

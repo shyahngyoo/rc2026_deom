@@ -11,7 +11,41 @@ def make_fsm(simulation=True, retries=1, obstacles=1):
                skill_timeout=9.0) for i in range(obstacles)],
         Task("two", "navigation", pose=(0.1, 0.0, 0.0)),
     ], (0.0, 0.0, 0.0))
-    return MissionFSM(route, 5.0, 5.0, 5.0, retries, simulation)
+    return MissionFSM(route, 5.0, 5.0, 5.0, retries, simulation, enable_relocalization=True)
+
+
+def test_default_no_relocalization_holds_and_aborts_on_initial_health_failure():
+    fsm = MissionFSM(make_fsm().route, 5., 5., 5., 1, False)
+    cmd = reply(fsm, fsm.start(), 'health_failed')
+    assert cmd.kind == 'handoff' and cmd.mode == 'SAFE_HOLD'
+    assert reply(fsm, cmd, confirmed_owner='SAFE_HOLD') is None
+    assert fsm.state == State.ABORTED and fsm.relocalization_attempts == 0
+    assert 'relocalization disabled' in fsm.error
+
+
+def test_no_relocalization_still_verifies_obstacle_exit_and_finishes():
+    fsm = make_fsm()
+    fsm.enable_relocalization = False
+    at_stop(fsm)
+    cmd = complete_obstacle(fsm)
+    assert cmd.task_id == 'two'
+    cmd = reply(fsm, cmd)
+    assert fsm.state == State.RETURNING
+    assert reply(fsm, cmd) is None
+    assert fsm.state == State.FINISHED and fsm.relocalization_attempts == 0
+
+
+def test_no_relocalization_aborts_after_skill_when_odometry_is_lost():
+    fsm = make_fsm()
+    fsm.enable_relocalization = False
+    at_stop(fsm)
+    cmd = reply(fsm, skill_command(fsm), completed=True, control_released=True, safe_stance=True)
+    cmd = reply(fsm, cmd)
+    cmd = reply(fsm, cmd, confirmed_owner='SAFE_HOLD')
+    assert cmd.kind == 'localization'
+    assert reply(fsm, cmd, 'health_failed') is None
+    assert fsm.state == State.ABORTED and fsm.relocalization_attempts == 0
+    assert fsm.route.current.id not in fsm.route.completed
 
 
 def reply(fsm, command, outcome="succeeded", terminal=True, **kwargs):

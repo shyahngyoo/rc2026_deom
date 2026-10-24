@@ -107,7 +107,8 @@ if ((!verify_wall)); then
   verify_extra+=(--deselect='common/go2_mission_backends/test/test_backend_mission.py::test_mission_two_distinct_obstacles_and_return[wall_clock]')
 fi
 /usr/bin/python3 -m pytest -q common/go2_mission_backends/test common/robocon_mission/test \
-  real/go2_onboard_bringup/test/test_profile.py real/quadruped_stm32_bridge/test tools/tests \
+  real/go2_onboard_bringup/test/test_profile.py real/go2_onboard_bringup/test/test_no_relocalization_launch.py \
+  real/quadruped_stm32_bridge/test tools/tests \
   "${verify_extra[@]}" --junitxml="$verify_report/tests.xml" 2>&1 | tee "$verify_report/tests.log"
 verify_nav_build="$verify_ws/build/go2_nav_bringup"
 [[ -f "$verify_nav_build/CTestTestfile.cmake" ]] ||

@@ -108,3 +108,30 @@ def test_corrupted_gicp_initial_pose_and_nav_footprint_are_rejected(inputs):
     create_profile(**dict(inputs,force=True))
     p=folder/'nav2.yaml';data=yaml.safe_load(p.read_text());data['local_costmap']['local_costmap']['ros__parameters']['footprint']='[]';p.write_text(yaml.safe_dump(data))
     with pytest.raises(ValueError):load_profile(folder,'navigation')
+
+
+def test_odometry_navigation_without_pcd_or_icp_guess(inputs):
+    inputs.update(map_pcd=None,initial_pose=None,localization_source='odometry',
+                  odom_in_map=[1.,2.,0.,0.,0.,.6])
+    folder=create_profile(**inputs)
+    profile,_=load_profile(folder,'navigation')
+    assert profile['map_pcd'] is None
+    params=yaml.safe_load((folder/'localization.yaml').read_text())['localization_evidence_adapter']['ros__parameters']
+    assert params['input_topic']=='/odometry/evidence'
+    assert params['evidence_max_age']==.5
+    assert static_report(folder,'navigation')['absolute_drift_correction'] is False
+    params['input_topic']='/gicp/evidence'
+    (folder/'localization.yaml').write_text(yaml.safe_dump({'localization_evidence_adapter':{'ros__parameters':params}}))
+    with pytest.raises(ValueError,match='evidence'):
+        load_profile(folder,'navigation')
+
+
+@pytest.mark.parametrize('alignment',[None,[0.]*5,[float('nan')]*6])
+def test_odometry_requires_explicit_alignment(inputs,alignment):
+    inputs.update(map_pcd=None,initial_pose=None,localization_source='odometry',odom_in_map=alignment)
+    with pytest.raises(ValueError):create_profile(**inputs)
+
+
+def test_odometry_rejects_ambiguous_icp_inputs(inputs):
+    inputs.update(localization_source='odometry',odom_in_map=[0.]*6)
+    with pytest.raises(ValueError,match='not GICP'):create_profile(**inputs)

@@ -14,6 +14,8 @@ def static_report(config_dir,mode='localization'):
         localization_ready=False,planning_only=mode=='navigation',motion_enabled=False,mission_allowed=False,
         checks=dict(profile=True,real_low_level_state=False,real_skill_executor=False,motor_path=False),
         reasons=['REAL_LOW_LEVEL_STATE_NOT_CONNECTED','REAL_SKILL_EXECUTOR_NOT_CONNECTED','MOTION_OUTPUT_DISABLED'],
+        localization_source=profile.get('localization_source','gicp'),
+        absolute_drift_correction=profile.get('localization_source','gicp')=='gicp',
         frames=profile['frames'],nav_output_topic=profile['nav_output_topic'],
         note='Configuration is valid; live sensor/localization readiness is checked by doctor_node. No Mission or robot output is started.')
 

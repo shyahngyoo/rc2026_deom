@@ -29,6 +29,7 @@ mission_manager:
     control_service: /motion/set_control_mode
     control_state_topic: /motion/control_state
     motion_state_service: /motion/get_state
+    enable_relocalization: false
     relocalization_action_name: /localization/relocalize
     base_frame: base_footprint
     handoff_timeout: 5.0

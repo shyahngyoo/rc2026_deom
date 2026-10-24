@@ -22,6 +22,7 @@ def generate_launch_description():
             share, "config", "mission_params.yaml")),
         DeclareLaunchArgument("use_sim_time", default_value="false"),
         DeclareLaunchArgument("simulation_mode", default_value="false"),
+        DeclareLaunchArgument("enable_relocalization", default_value="false"),
         DeclareLaunchArgument("autostart", default_value="false"),
         DeclareLaunchArgument("startup_check_service", default_value=""),
         DeclareLaunchArgument("accepted_pose_topic", default_value=""),
@@ -32,6 +33,7 @@ def generate_launch_description():
         Node(package="robocon_mission", executable="mission_manager",
              name="mission_manager", output="screen", parameters=[params, {
                  "route_file": route,
+                 "enable_relocalization": ParameterValue(LaunchConfiguration("enable_relocalization"), value_type=bool),
                  "accepted_pose_topic": ParameterValue(
                      LaunchConfiguration("accepted_pose_topic"), value_type=str),
                  "accepted_pose_type": ParameterValue(

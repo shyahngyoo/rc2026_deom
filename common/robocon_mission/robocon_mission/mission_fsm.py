@@ -51,7 +51,7 @@ class MissionFSM:
                  localization_timeout=5.0, relocalize_timeout=15.0,
                  max_relocalization_retries=1, rule_validator=None,
                  wait_at_waypoints=False, precise_waypoints=False,
-                 max_waypoint_alignment_retries=1):
+                 max_waypoint_alignment_retries=1, enable_relocalization=False):
         self.route, self.state = route, State.IDLE
         self.error = self.nav_mode = ""
         self.simulation_mode = simulation_mode  # never bypasses confirmation
@@ -72,6 +72,9 @@ class MissionFSM:
         self.handoff_timeout = handoff_timeout
         self.skill_safe_timeout = skill_safe_timeout
         self.localization_timeout = localization_timeout
+        if not isinstance(enable_relocalization, bool):
+            raise ValueError('enable_relocalization must be a boolean')
+        self.enable_relocalization = enable_relocalization
         self.relocalize_timeout = relocalize_timeout
         self.max_relocalization_retries = max_relocalization_retries
         self.relocalization_attempts = 0
@@ -156,6 +159,9 @@ class MissionFSM:
                 self._resume_navigation(self.resume_state))
 
     def _relocalize(self) -> Optional[Command]:
+        if not self.enable_relocalization:
+            self.abort('localization unavailable; relocalization disabled; check fixed start and restart')
+            return None
         if self.relocalization_attempts > self.max_relocalization_retries:
             self.abort("localization: autonomous relocalization retries exhausted")
             return None

@@ -34,6 +34,7 @@ class MissionManager(Node):
             "control_service": "/motion/set_control_mode",
             "control_state_topic": "/motion/control_state",
             "motion_state_service": "/motion/get_state",
+            "enable_relocalization": False,
             "relocalization_action_name": "/localization/relocalize",
             "base_frame": "base_footprint",
             "startup_check_service": "", "startup_check_max_age": 1.0,
@@ -96,7 +97,8 @@ class MissionManager(Node):
             value("relocalize_timeout"), value("max_relocalization_retries"),
             wait_at_waypoints=value("wait_at_waypoints"),
             precise_waypoints=value("precise_waypoints"),
-            max_waypoint_alignment_retries=value("max_waypoint_alignment_retries"))
+            max_waypoint_alignment_retries=value("max_waypoint_alignment_retries"),
+            enable_relocalization=value("enable_relocalization"))
         self.stop_monitor = StopMonitor(
             self, value("odom_timeout"), value("stable_linear_velocity"),
             value("stable_angular_velocity"), value("stable_duration"))
@@ -115,9 +117,11 @@ class MissionManager(Node):
             value("approach_bt_file")), value("server_timeout"), value("cancel_timeout"))
         self.obstacle = ObstacleClient(self, value("obstacle_action_name"),
                                        value("server_timeout"), value("cancel_timeout"))
-        self.relocalization = RelocalizationClient(
+        self.relocalization = (RelocalizationClient(
             self, value("relocalization_action_name"), self.route.frame_id,
             value("server_timeout"), value("cancel_timeout"))
+            if value("enable_relocalization") else None)
+        self.action_runners = tuple(r for r in (self.navigation, self.obstacle, self.relocalization) if r is not None)
         self.motion_state = MotionStateClient(
             self, value("motion_state_service"), self.stop_monitor.ready,
             value("verify_stable_duration"))
@@ -247,7 +251,7 @@ class MissionManager(Node):
 
     def _actions_terminal(self):
         return all(r.active is None and not r.unknown_terminal
-                   for r in (self.navigation, self.obstacle, self.relocalization))
+                   for r in self.action_runners)
 
     def _pose_matches(self, target, xy, yaw):
         sample = self.localization.sample()
@@ -291,7 +295,7 @@ class MissionManager(Node):
         if self.safety_cleanup:
             return
         self.safety_cleanup = True
-        for runner in (self.navigation, self.obstacle, self.relocalization):
+        for runner in self.action_runners:
             runner.request_cancel("mission_stopped")
         self.localization.cancel()
         self.verifier.cancel()
@@ -347,7 +351,9 @@ class MissionManager(Node):
             elif command.kind == "verify_end":
                 self.verifier.start(command, self._on_action)
             elif command.kind == "relocalize":
-                if not self._actions_terminal() or not self.handoff.confirmed("SAFE_HOLD"):
+                if self.relocalization is None:
+                    self._abort("relocalization disabled")
+                elif not self._actions_terminal() or not self.handoff.confirmed("SAFE_HOLD"):
                     self._abort("relocalization requires confirmed SAFE_HOLD")
                 else:
                     self.relocalization.execute(command, self._on_action)
@@ -449,7 +455,8 @@ class MissionManager(Node):
         self.handoff.tick()
         self.navigation.tick()
         self.obstacle.tick()
-        self.relocalization.tick()
+        if self.relocalization is not None:
+            self.relocalization.tick()
         self.localization.tick()
         self.motion_state.tick()
         self.verifier.tick()
@@ -496,11 +503,11 @@ class MissionManager(Node):
         deadline = time.monotonic() + float(self.get_parameter("cancel_timeout").value)
         # Only shutdown drains callbacks; task execution itself never waits/spins.
         while rclpy.ok() and time.monotonic() < deadline:
-            active = any(r.active for r in (self.navigation, self.obstacle, self.relocalization))
+            active = any(r.active for r in self.action_runners)
             if not active and self.handoff.emergency.pending is None:
                 break
             rclpy.spin_once(self, timeout_sec=0.05)
-            for runner in (self.navigation, self.obstacle, self.relocalization):
+            for runner in self.action_runners:
                 runner.tick()
             self.handoff.tick()
         if not self._actions_terminal():

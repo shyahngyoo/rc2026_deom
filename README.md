@@ -1,5 +1,7 @@
 # RC2026 机器马机载导航与 Mission 后端
 
+> 无重定位分支：新增 **[固定起点＋FAST-LIO 使用指南](docs/NO_RELOCALIZATION.md)**。使用 `no_relocalization.launch.py` 和 `localization_source: odometry`，无需定位 PCD，不启动 GICP；Mission 默认关闭自动重定位。导航仍需同坐标系的二维地图与路线，起点对齐和累计漂移需现场验证。下文原有 GICP 入口保留兼容。
+
 > STM32 接入更新：自制机器人不支持横移。新增单串口网关默认禁用运动；Hurricane 实机改走共享网关。协议为待固件实现草案，见 [STM32 接入指南](docs/STM32_BRIDGE_GUIDE.md)。下文原有定位/规划诊断入口继续保留。
 
 

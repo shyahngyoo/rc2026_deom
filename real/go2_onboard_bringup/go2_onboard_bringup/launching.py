@@ -49,13 +49,19 @@ def onboard_actions(config_dir,mode):
     actions=[LogInfo(msg='REAL INPUTS; MOTION DISABLED; no Mission/mock/simulated low-level nodes.'),
         Node(package='go2_onboard_bringup',executable='doctor_node',name='onboard_doctor',output='screen',
              parameters=[dict(config_dir=str(folder),mode=mode,use_sim_time=False)])]
-    if mode in ('localization','navigation'):
+    global_mode=mode in ('localization','navigation')
+    odometry_only=profile.get('localization_source')=='odometry'
+    if global_mode and not odometry_only:
         actions.append(include('go2_real_bringup','localization.launch.py',dict(map_path=profile['map_pcd'],
             show_rviz='false',params_file=str(folder/'gicp.yaml'),lio_params=str(folder/'fast_lio.yaml'),
             user_config_path=str(folder/'mid360.json'))))
     else:
         actions.append(include('go2_real_bringup','lidar.launch.py',dict(user_config_path=str(folder/'mid360.json'),xfer_format='1')))
-        if mode=='odometry':actions.append(include('go2_real_bringup','odometry.launch.py',dict(show_rviz='false',lio_params=str(folder/'fast_lio.yaml'))))
+        if mode=='odometry' or global_mode:actions.append(include('go2_real_bringup','odometry.launch.py',dict(show_rviz='false',lio_params=str(folder/'fast_lio.yaml'))))
+    if global_mode and odometry_only:
+        actions.append(Node(package='go2_mission_backends',executable='odometry_localization',
+            name='odometry_localization',output='screen',parameters=[dict(
+                odom_in_map=[float(v) for v in profile['odom_in_map']],alignment_confirmed=True,use_sim_time=False)]))
     if mode in ('odometry','localization','navigation'):
         actions.append(Node(package='go2_mission_backends',executable='robot_state_adapter',name='robot_state_adapter',
             output='screen',parameters=[str(folder/'robot_state.yaml'),dict(use_sim_time=False)]))

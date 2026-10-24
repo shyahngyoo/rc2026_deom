@@ -44,7 +44,7 @@ Skill 必须返回 Action `SUCCEEDED`，且 `completed=true`、`control_released
 | `/motion/control_state` | `ControlState` | Mission 使用的控制所有权与健康心跳 |
 | `/motion/get_state` | `GetMotionState` | 独立查询技能活动、安全站姿、可释放及故障 |
 | `/mission/localization_ok` | `std_srvs/srv/Trigger` | 定位质量检查；仅有 TF 不足以成功 |
-| `/localization/relocalize` | `Relocalize` | 自主重定位请求与终态 |
+| `/localization/relocalize` | `Relocalize` | 仅 `enable_relocalization:=true` 时创建客户端；本分支默认关闭，健康检查失败转 SAFE_HOLD 后终止 |
 | `/odom` | `nav_msgs/msg/Odometry` | 有效时间戳的运动测量与连续停稳检查 |
 | `map → base_footprint` | TF2 | 独立测得的全局平面位姿 |
 

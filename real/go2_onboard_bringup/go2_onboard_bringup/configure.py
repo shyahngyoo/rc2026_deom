@@ -12,6 +12,8 @@ def parser():
     p.add_argument('--lidar-ip',required=True)
     p.add_argument('--imu-in-base',required=True,type=float,nargs=6,metavar=('X','Y','Z','ROLL','PITCH','YAW'),help='Measured T_base_IMU, metres/radians')
     p.add_argument('--stage',choices=['sensor_only','localization'],default='sensor_only')
+    p.add_argument('--localization-source',choices=['gicp','odometry'],default='gicp')
+    p.add_argument('--odom-in-map',type=float,nargs=6,help='Measured fixed T_map_odom XYZ/RPY; required for odometry source')
     p.add_argument('--map-pcd',help='Absolute existing real XYZ PCD')
     p.add_argument('--initial-pose',type=float,nargs=6,help='Measured IMU pose in map: x y z roll pitch yaw')
     p.add_argument('--nav-map',help='Absolute existing occupancy-grid YAML')
@@ -24,7 +26,8 @@ def main(argv=None):
     args=parser().parse_args(argv)
     try:
         folder=create_profile(args.config_dir,args.host_ip,args.lidar_ip,args.imu_in_base,args.stage,
-            args.map_pcd,args.initial_pose,args.nav_map,args.footprint,args.force)
+            args.map_pcd,args.initial_pose,args.nav_map,args.footprint,args.force,
+            args.localization_source,args.odom_in_map)
     except (ValueError,KeyError,TypeError,OSError) as error:
         print(json.dumps(dict(status='CONFIGURATION_REJECTED',reason=str(error),motion_enabled=False)),file=sys.stderr)
         return 2

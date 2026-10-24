@@ -396,10 +396,12 @@ def _run_scenario_inner(tmp_path, skill_mode="success", nav_mode="success",
         "stop_timeout": stop_timeout,
         "handoff_timeout": 1.0, "skill_safe_timeout": 0.7,
         "relocalize_timeout": 0.6, "max_relocalization_retries": 1,
+        "enable_relocalization": relocalize_success,
         "verify_stable_duration": 0.15, "mission_time_limit": mission_time_limit,
         "accepted_pose_topic": accepted_pose_topic,
     }.items()]
     mission = MissionManager(parameter_overrides=parameters)
+    assert (mission.relocalization is not None) == relocalize_success
     # Match mission_manager: its FSM/adapters run serially. Mock servers have
     # a separate Executor so injected blocking Actions cannot starve Mission.
     executor = MultiThreadedExecutor(num_threads=3)
