@@ -5,6 +5,7 @@ import time
 
 import rclpy
 from go2_obstacle_interfaces.msg import MotionTelemetry
+from go2_mission_backends.runtime_counter import RuntimeCounter
 from rclpy.clock import Clock, ClockType
 from rclpy.node import Node
 from std_msgs.msg import String
@@ -38,7 +39,8 @@ class TelemetryAdapter(Node):
     def __init__(self, **kwargs):
         super().__init__('stm32_telemetry_adapter', **kwargs)
         for key, value in dict(input_topic='/stm32/status', output_topic='/motion/telemetry',
-                source_id='stm32', base_frame='base_footprint', status_timeout=0.3).items():
+                source_id='stm32', base_frame='base_footprint', status_timeout=0.3,
+                counter_state_path='').items():
             self.declare_parameter(key, value)
         self.timeout = self.get_parameter('status_timeout').value
         if not math.isfinite(self.timeout) or self.timeout <= 0:
@@ -46,6 +48,8 @@ class TelemetryAdapter(Node):
         self.source_id = self.get_parameter('source_id').value
         if not self.source_id:
             raise ValueError('source_id required')
+        self.sequence_counter = RuntimeCounter('telemetry:' + self.source_id,
+                                               self.get_parameter('counter_state_path').value)
         self.sequence = self.gateway_sequence = self.last_stamp = 0
         self.gateway_session = None
         self.retired_sessions = set()
@@ -57,7 +61,7 @@ class TelemetryAdapter(Node):
         self.create_timer(0.05, self._tick, clock=Clock(clock_type=ClockType.STEADY_TIME))
 
     def _publish(self, status=None, error='', stamp_ns=None):
-        self.sequence += 1
+        self.sequence = self.sequence_counter.next()
         msg = MotionTelemetry()
         msg.header.stamp = self.get_clock().now().to_msg()
         if stamp_ns is not None:

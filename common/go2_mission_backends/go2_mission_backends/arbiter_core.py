@@ -22,7 +22,8 @@ class Arbiter:
     OWNERS = ('SAFE_HOLD', 'NAVIGATION', 'SKILL')
 
     def __init__(self, command_timeout=0.5, max_command_age=0.3,
-                 max_linear=0.5, max_angular=1.0, max_cached_requests=2048):
+                 max_linear=0.5, max_angular=1.0, max_cached_requests=2048,
+                 generation_counter=None):
         if not all(math.isfinite(x) and x > 0 for x in
                    (command_timeout, max_command_age, max_linear, max_angular)):
             raise ValueError('invalid arbitration limits')
@@ -30,14 +31,16 @@ class Arbiter:
         self.max_linear, self.max_angular = max_linear, max_angular
         self.max_cached_requests = max_cached_requests
         self.owner, self.mission_id = 'SAFE_HOLD', ''
-        self.generation, self.granted_ros = 1, 0
+        self.generation_counter = generation_counter
+        self.generation = generation_counter.next() if generation_counter else 1
+        self.granted_ros = 0
         self.deadline, self.last_command_wall = 0.0, 0.0
         self.last_stamp, self.command = 0, None
         self.reason, self.cache = 'INITIAL_SAFE_HOLD', {}
         self.last_ros = None
 
     def hold(self, reason):
-        self.generation += 1
+        self.generation = self.generation_counter.next() if self.generation_counter else self.generation + 1
         self.owner, self.mission_id = 'SAFE_HOLD', ''
         self.deadline, self.last_stamp, self.command = 0.0, 0, None
         self.reason = reason
@@ -98,7 +101,7 @@ class Arbiter:
                 reason = 'STOP_TERMINAL_OR_SUPPORT_UNCONFIRMED'
         if not reason:
             if request.owner != self.owner or request.mission_id != self.mission_id:
-                self.generation += 1
+                self.generation = self.generation_counter.next() if self.generation_counter else self.generation + 1
                 self.granted_ros, self.last_stamp = ros, 0
                 self.command = None
                 self.last_command_wall = wall

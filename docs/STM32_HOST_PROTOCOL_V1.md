@@ -82,6 +82,11 @@ Host 发送紧凑 JSON，键排序，非 ASCII 字符使用 JSON 转义（`ensur
 
 以上字段长度是 Python 字符数限制，整个 JSON 仍须 ≤1024 bytes；没有为 MCU 规定新的单字段字节数组长度。`generation` 在 core 没有独立 wire 上限校验，应区别 ROS uint64 来源与尚未冻结的固件范围。
 
+运行中的 `motion_arbiter` 使用持久化区间分配 `generation`，节点重启后不回到 1，
+其值可以超过 `UINT32_MAX`。固件解析和保存这个授权字段时应使用 `uint64_t`，不能截断为
+32 位；这不改变 UART 帧头 `sequence` 的 uint32 格式。主机区间分配范围目前限制在
+正 int64 内，仍属于 ROS uint64 的有效范围。
+
 ### 3.2 HELLO — 1
 
 必填（当前 Host 发送）：`protocol_version`（integer，1），`host`（string，固定 `quadruped_stm32_bridge`）。无其他当前可选发送字段。既有最简示例/向量省略 host，只含版本；其兼容性差异见第 9 节。

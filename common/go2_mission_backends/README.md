@@ -62,3 +62,20 @@ GICP 原子发布一次匹配的测量时间、source、epoch、sequence、accep
 
 
 `rely-only` 保留 `simulation_backend` 与 `backend_simulation.launch.py`，供独立的软件安全回归使用；它们不被机载 real.launch 或正式 mission.launch 包含。测试后端的 `simulation_mode` 防护和 `/backend_sim/cmd_vel` 隔离输出保持不变，不能用测试状态替代 STM32 真实反馈。
+
+## 节点重启后的编号
+
+`motion_arbiter` 的授权 `generation` 与 `stm32_telemetry_adapter` 的输出 `sequence`
+使用持久化编号区间。每次启动在 SQLite 事务中预留新的 `2^32` 个编号，之后在内存中递增，
+不会每次发布都写磁盘。新实例的编号高于旧实例整个区间；旧实例不能再次分配区间。
+仲裁器重启仍从 `SAFE_HOLD` 开始，不恢复旧租约或命令，需要重新申请授权。
+
+默认状态文件为 `$XDG_STATE_HOME/rc2026/runtime_counters.sqlite3`；未设置该环境变量时，
+使用 `~/.local/state/rc2026/runtime_counters.sqlite3`。两个节点均支持 ROS 参数
+`counter_state_path` 指定文件。重启前后必须使用相同的持久化路径，不能将它放在每次清空的临时目录。
+数据库损坏、不可写或编号耗尽会使节点启动失败，不会悄悄从低编号重新开始。
+
+ROS 消息格式不变；`generation` 和遥测 `sequence` 原本就是 `uint64`，现在可超过 32 位。
+这里的遥测序号不等于 UART 帧头的 32 位 `sequence`。更新时需同时重新构建
+`go2_mission_backends` 和 `quadruped_stm32_bridge`。状态文件丢失或更换运行用户时，
+应先停止整个控制链并重新初始化接收端；本机制不承诺跨机器、跨状态文件恢复旧租约。

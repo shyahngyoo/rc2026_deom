@@ -15,6 +15,7 @@ from go2_obstacle_interfaces.msg import ControlState, MotionAuthority, MotionCom
 from go2_obstacle_interfaces.srv import SetControlMode, GetMotionState
 from robocon_mission.stop_monitor import StopMonitor
 from .arbiter_core import Arbiter, Switch
+from .runtime_counter import RuntimeCounter
 
 class MotionArbiter(Node):
     def __init__(self, **kwargs):
@@ -25,7 +26,8 @@ class MotionArbiter(Node):
             command_timeout=0.5, max_command_age=0.3, max_linear_speed=0.5,
             max_angular_speed=1.0, stable_duration=0.15,
             stable_linear_velocity=0.03, stable_angular_velocity=0.05,
-            telemetry_source_id='', base_frame='base_footprint', odom_frame='nav_odom', output_frequency=20.0)
+            telemetry_source_id='', base_frame='base_footprint', odom_frame='nav_odom', output_frequency=20.0,
+            counter_state_path='')
         for k,v in defaults.items(): self.declare_parameter(k,v)
         p=lambda k:self.get_parameter(k).value
         if len({p('nav_input'),p('skill_input'),p('output_topic')}) != 3:
@@ -39,7 +41,8 @@ class MotionArbiter(Node):
         self.state_timeout=p('state_timeout')
         self.telemetry_source=p('telemetry_source_id')
         self.base_frame=p('base_frame');self.odom_frame=p('odom_frame')
-        self.core=Arbiter(p('command_timeout'),p('max_command_age'),p('max_linear_speed'),p('max_angular_speed'))
+        self.core=Arbiter(p('command_timeout'),p('max_command_age'),p('max_linear_speed'),p('max_angular_speed'),
+                         generation_counter=RuntimeCounter('motion_authority', p('counter_state_path')))
         self.telemetry=None; self.telemetry_at=0.0; self.last_telemetry_seq=0; self.last_telemetry_stamp=0
         self.odom_stamp=0; self.odom_at=0.0; self.last_ros=None
         self.stop=StopMonitor(self,self.state_timeout,p('stable_linear_velocity'),p('stable_angular_velocity'),p('stable_duration'))

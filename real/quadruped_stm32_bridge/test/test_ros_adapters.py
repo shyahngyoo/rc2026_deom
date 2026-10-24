@@ -124,6 +124,58 @@ def test_stale_session_cannot_advance_telemetry_replay_watermark(ros):
     assert adapter.valid
 
 
+def test_telemetry_adapter_restart_is_accepted_by_running_arbiter(ros, tmp_path):
+    from types import SimpleNamespace
+    from rclpy.parameter import Parameter
+    from go2_mission_backends.motion_arbiter import MotionArbiter
+    add, _ = ros
+    params = [Parameter('counter_state_path', value=str(tmp_path / 'counters.sqlite3'))]
+    arbiter = add(MotionArbiter, parameter_overrides=params)
+    old = add(TelemetryAdapter, parameter_overrides=params,
+              cli_args=['--ros-args', '-r', '__node:=old_telemetry'])
+    old.pub = SimpleNamespace(publish=arbiter._telemetry)
+    old._publish(snapshot(old)['status'])
+    previous = arbiter.last_telemetry_seq
+    assert arbiter.telemetry is not None
+    new = add(TelemetryAdapter, parameter_overrides=params,
+              cli_args=['--ros-args', '-r', '__node:=new_telemetry'])
+    new.pub = SimpleNamespace(publish=arbiter._telemetry)
+    new._publish(snapshot(new)['status'])
+    assert arbiter.telemetry is not None and arbiter.last_telemetry_seq > previous
+    old._publish(snapshot(old)['status'])  # Even fresh-stamped old-instance output is fenced.
+    assert arbiter.telemetry is None and arbiter.core.reason == 'TELEMETRY_INVALID'
+    new._publish(snapshot(new)['status'])
+    assert arbiter.telemetry is not None
+
+
+def test_arbiter_restart_gets_new_authority_without_restoring_old_commands(ros, tmp_path):
+    from rclpy.parameter import Parameter
+    from go2_mission_backends.motion_arbiter import MotionArbiter
+    from go2_mission_backends.arbiter_core import Switch
+    from test_protocol_gateway import ready
+    add, _ = ros
+    params = [Parameter('counter_state_path', value=str(tmp_path / 'counters.sqlite3'))]
+    old = add(MotionArbiter, parameter_overrides=params,
+              cli_args=['--ros-args', '-r', '__node:=old_arbiter'])
+    gateway, peer = ready()
+    assert old.core.switch(Switch('NAVIGATION', 'SAFE_HOLD', 'old', 'grant', 2.),
+                           .01, 1000000000, True).accepted
+    generation = old.core.generation
+    assert gateway.set_authority('NAVIGATION', 'old', generation, 2., True, .01)
+    new = add(MotionArbiter, parameter_overrides=params,
+              cli_args=['--ros-args', '-r', '__node:=new_arbiter'])
+    assert new.core.owner == 'SAFE_HOLD' and new.core.generation > generation
+    assert new.core.command is None
+    assert gateway.set_authority('SAFE_HOLD', '', new.core.generation, 0., True, .02)
+    assert new.core.switch(Switch('NAVIGATION', 'SAFE_HOLD', 'new', 'grant', 2.),
+                           .03, 1100000000, True).accepted
+    assert gateway.set_authority('NAVIGATION', 'new', new.core.generation, 2., True, .03)
+    assert not gateway.velocity((.1, 0, 0, 0, 0, 0), .04,
+                                command_token=('NAVIGATION', 'old', generation))
+    assert not gateway.set_authority('NAVIGATION', 'old', generation, 2., True, .05)
+    assert gateway.set_authority('NAVIGATION', 'new', new.core.generation, 2., True, .06)
+
+
 def test_telemetry_uses_new_measured_feedback_and_stale_state_is_unknown(ros):
     add, spin=ros
     adapter=add(TelemetryAdapter)
