@@ -76,6 +76,56 @@ def correlate(transport):
             ("request_id", "runner_session", "step_index", "obstacle_id")}
 
 
+def test_gateway_restart_accepts_low_sequence_and_rejects_retired_sessions():
+    node, context, transport, _, envelope = fixture()
+    context['active'] = False
+    transport.tick()
+    transport._status(String(data=json.dumps(dict(envelope, gateway_sequence=1000))))
+    for session in (101, 102):
+        node.now += 10_000_000
+        fresh = dict(envelope, session=session, gateway_sequence=1, stamp_ns=node.now)
+        transport._status(String(data=json.dumps(fresh)))
+        assert transport.connection_session == session and transport.gateway_sequence == 1
+        assert transport.status_ready()
+        received = transport.status_received
+        for old_session in range(100, session):
+            replay = dict(fresh, session=old_session, gateway_sequence=2000)
+            transport._status(String(data=json.dumps(replay)))
+            assert transport.connection_session == session and transport.gateway_sequence == 1
+        transport._status(String(data=json.dumps(fresh)))
+        assert transport.status_received == received  # Duplicate cannot renew freshness.
+
+
+def test_gateway_restart_cannot_complete_or_resume_active_skill():
+    node, context, transport, feedback, envelope = fixture([6])
+    transport.send(6)
+    transport._status(String(data=json.dumps(dict(envelope, gateway_sequence=1000))))
+    node.now += 10_000_000
+    fresh = copy.deepcopy(envelope)
+    fresh.update(session=101, gateway_sequence=1, stamp_ns=node.now)
+    fresh['status'].update(correlate(transport), skill_state='succeeded')
+    transport._status(String(data=json.dumps(fresh)))
+    assert transport.connection_session == 101 and transport.gateway_sequence == 1
+    assert transport.revoked and not transport.ready() and feedback == []
+    assert transport.direction == (0., 0.)
+    with pytest.raises(RuntimeError, match='not ready'):
+        transport.send(6)
+    context['active'] = False
+    transport.tick()
+    assert transport.pending is None and not transport.revoked
+
+
+def test_stale_new_session_does_not_poison_current_session_sequence():
+    node, _, transport, _, envelope = fixture()
+    stale = dict(envelope, session=101, gateway_sequence=10000,
+                 stamp_ns=node.now - 1_000_000_000)
+    transport._status(String(data=json.dumps(stale)))
+    assert transport.connection_session == 100 and transport.gateway_sequence == 1
+    node.now += 10_000_000
+    transport._status(String(data=json.dumps(dict(envelope, gateway_sequence=2, stamp_ns=node.now))))
+    assert transport.gateway_sequence == 2 and transport.ready()
+
+
 @pytest.mark.parametrize("command,expected", [(1, (0., .25)), (2, (.08, 0.)),
                                                 (3, (0., -.25)), (4, (-.08, 0.))])
 def test_directions_only_use_typed_arbiter_channel(command, expected):

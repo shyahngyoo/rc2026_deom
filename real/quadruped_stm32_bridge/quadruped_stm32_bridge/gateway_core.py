@@ -220,7 +220,9 @@ class GatewayCore:
         if s['mode'] == owner and ((owner == 'NAVIGATION' and s['nav_active']) or
                                   (owner == 'SKILL' and s['skill_active'])):
             return True
-        if self.mode_requested == owner:
+        if (self.mode_requested == owner
+                or any(item['kind'] == T.SET_MODE for item in self.queue)
+                or any(item['kind'] == T.SET_MODE for item in self.pending.values())):
             return False
         if not (s['stopped'] and s['safe_stance'] and s['control_releasable']
                 and not s['nav_active'] and not s['skill_active']):
@@ -449,6 +451,11 @@ class GatewayCore:
                     self.event('INVALID_STATUS', event='protocol_error', detail=str(exc))
                     continue
                 self.status, self.status_at, self.status_stamp_ns = status, now, stamp_ns
+                if (self.mode_requested == status['mode']
+                        and (status['nav_active'] or status['skill_active'])):
+                    # Activation completes the mode intent. The outstanding
+                    # packet still gates another request until its ACK arrives.
+                    self.mode_requested = None
                 hold_correlated = (not self.hold_metadata or not self.hold_metadata.get('request_id') or
                                    all(status.get(k) == self.hold_metadata.get(k) for k in
                                        ('request_id', 'runner_session', 'obstacle_id', 'step_index')))

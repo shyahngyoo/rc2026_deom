@@ -47,6 +47,8 @@ class TelemetryAdapter(Node):
         if not self.source_id:
             raise ValueError('source_id required')
         self.sequence = self.gateway_sequence = self.last_stamp = 0
+        self.gateway_session = None
+        self.retired_sessions = set()
         self.at = 0.0
         self.valid = False
         self.last_ros = None
@@ -79,12 +81,22 @@ class TelemetryAdapter(Node):
             if not isinstance(data, dict):
                 raise ValueError('INVALID_SNAPSHOT')
             sequence, stamp = data.get('gateway_sequence'), data.get('stamp_ns')
+            session = data.get('session')
             now = self.get_clock().now().nanoseconds
-            if type(sequence) is not int or sequence <= self.gateway_sequence:
+            if type(session) is not int or not 0 < session <= 0xffffffffffffffff:
+                raise ValueError('INVALID_GATEWAY_SESSION')
+            if session in self.retired_sessions:
+                raise ValueError('RETIRED_GATEWAY_SESSION')
+            if (type(sequence) is not int or sequence <= 0
+                    or (session == self.gateway_session and sequence <= self.gateway_sequence)):
                 raise ValueError('REPLAYED_GATEWAY_STATUS')
-            self.gateway_sequence = sequence
             if type(stamp) is not int or stamp <= self.last_stamp or stamp <= 0 or not 0 <= (now-stamp)/1e9 <= self.timeout:
                 raise ValueError('STALE_GATEWAY_STATUS')
+            if session != self.gateway_session:
+                if self.gateway_session is not None:
+                    self.retired_sessions.add(self.gateway_session)
+                self.gateway_session = session
+            self.gateway_sequence = sequence
             self.last_stamp = stamp
             status = measured_status(data)
             error = data.get('error_code', '') or status['fault_code']

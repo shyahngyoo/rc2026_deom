@@ -647,3 +647,51 @@ def test_skill_ack_failure_notifies_task_once(failure):
     assert core.active_skill is None
     hold, = frames(core, .20)
     assert hold.kind == T.HOLD
+
+
+@pytest.mark.parametrize('late_mode_ack', [False, True])
+def test_consecutive_skills_reactivate_mode_after_measured_completion(late_mode_ack):
+    core, peer = ready()
+    authorize(core, 'SKILL')
+    assert core.skill_request(request('first'), .01)
+    mode, = frames(core, .01)
+    if not late_mode_ack:
+        peer.ack(mode, .02)
+    peer.status(.03, mode='SKILL', skill_active=True)
+    start, = frames(core, .03)
+    assert start.kind == T.SKILL_START
+    peer.ack(start, .04)
+    peer.status(.05, mode='SKILL', skill_active=False, skill_state='succeeded',
+                request_id='first', runner_session='runner', obstacle_id='obstacle', step_index=0)
+    assert core.active_skill is None
+    assert core.skill_request(request('second'), .06)
+    if late_mode_ack:
+        assert frames(core, .06) == []
+        peer.ack(mode, .07)
+        core.tick(.08)
+    next_mode, = frames(core, .08)
+    assert next_mode.kind == T.SET_MODE
+    assert next_mode.sequence != mode.sequence
+    peer.ack(next_mode, .09)
+    assert frames(core, .09) == []  # An ACK alone does not activate the new mode.
+    peer.status(.10, mode='SKILL', skill_active=True)
+    second, = frames(core, .10)
+    assert second.kind == T.SKILL_START and second.payload['request_id'] == 'second'
+
+
+def test_next_skill_waits_for_safe_stance_before_reactivating_mode():
+    core, peer = ready()
+    skill_mode(core, peer)
+    assert core.skill_request(request('first'), .03)
+    start, = frames(core, .03)
+    peer.ack(start, .04)
+    peer.status(.05, mode='SKILL', skill_active=False, skill_state='succeeded',
+                request_id='first', runner_session='runner', obstacle_id='obstacle', step_index=0,
+                safe_stance=False, control_releasable=False)
+    assert core.skill_request(request('second'), .06)
+    assert frames(core, .06) == []
+    peer.status(.07, mode='SKILL', skill_active=False)
+    mode, = frames(core, .07)
+    assert mode.kind == T.SET_MODE
+    core.tick(.08)
+    assert frames(core, .08) == []

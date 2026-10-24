@@ -87,6 +87,43 @@ def snapshot(node, seq=1):
             estop=False,human_enable=True,fault_code='',skill_state='idle',capabilities=[]), error_code='')
 
 
+def test_telemetry_gateway_restart_accepts_low_sequence_and_rejects_old_sessions(ros):
+    add, _ = ros
+    adapter = add(TelemetryAdapter)
+    adapter._status(String(data=json.dumps(snapshot(adapter, 1000))))
+    assert adapter.valid
+    for session in (101, 102):
+        fresh = snapshot(adapter, 1)
+        fresh['session'] = session
+        adapter._status(String(data=json.dumps(fresh)))
+        assert adapter.valid and adapter.gateway_session == session
+        assert adapter.gateway_sequence == 1
+        for old_session in range(100, session):
+            replay = snapshot(adapter, 2000)
+            replay['session'] = old_session
+            adapter._status(String(data=json.dumps(replay)))
+            assert not adapter.valid and adapter.gateway_session == session
+            assert adapter.gateway_sequence == 1
+        fresh = snapshot(adapter, 2)
+        fresh['session'] = session
+        adapter._status(String(data=json.dumps(fresh)))
+        assert adapter.valid
+        adapter._status(String(data=json.dumps(fresh)))
+        assert not adapter.valid  # Same-session replay protection remains active.
+
+
+def test_stale_session_cannot_advance_telemetry_replay_watermark(ros):
+    add, _ = ros
+    adapter = add(TelemetryAdapter)
+    adapter._status(String(data=json.dumps(snapshot(adapter, 1))))
+    stale = snapshot(adapter, 10000)
+    stale.update(session=101, stamp_ns=stale['stamp_ns'] - 1_000_000_000)
+    adapter._status(String(data=json.dumps(stale)))
+    assert adapter.gateway_session == 100 and adapter.gateway_sequence == 1
+    adapter._status(String(data=json.dumps(snapshot(adapter, 2))))
+    assert adapter.valid
+
+
 def test_telemetry_uses_new_measured_feedback_and_stale_state_is_unknown(ros):
     add, spin=ros
     adapter=add(TelemetryAdapter)

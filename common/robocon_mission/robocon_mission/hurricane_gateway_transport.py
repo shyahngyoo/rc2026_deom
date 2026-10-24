@@ -50,6 +50,8 @@ class GatewayTransport:
         self.status_received = 0.0
         self.gateway_sequence = -1
         self.connection_session = None
+        self.retired_sessions = set()
+        self.gateway_stamp = 0
         self.pending = None
         self.direction = (0.0, 0.0)
         self.lease_key = None
@@ -270,10 +272,24 @@ class GatewayTransport:
                 data = json.loads(message.data)
                 sequence, state = data["gateway_sequence"], data["status"]
                 stamp = data["stamp_ns"]
-                if (type(sequence) is not int or sequence <= self.gateway_sequence
-                        or not self._fresh_stamp(stamp, self.status_timeout)):
+                session = data.get("session")
+                if (type(session) is not int or not 0 < session <= 0xffffffffffffffff
+                        or session in self.retired_sessions
+                        or type(sequence) is not int or sequence <= 0
+                        or (session == self.connection_session and sequence <= self.gateway_sequence)
+                        or not self._fresh_stamp(stamp, self.status_timeout)
+                        or stamp < self.gateway_stamp):
                     return
+                if session != self.connection_session:
+                    if self.connection_session is not None:
+                        self.retired_sessions.add(self.connection_session)
+                        if self.context().get("active"):
+                            self.revoked = True
+                            self.direction = (0.0, 0.0)
+                            self._publish_velocity(self.direction)
+                    self.connection_session = session
                 self.gateway_sequence = sequence
+                self.gateway_stamp = stamp
                 if (data.get("connected") is not True or data.get("handshake") is not True
                         or data.get("error_code") or not isinstance(state, dict)):
                     self.snapshot = None
@@ -283,12 +299,6 @@ class GatewayTransport:
                         self.revoked = True
                     self._publish_velocity(self.direction)
                     return
-                if (self.connection_session is not None
-                        and data.get("session") != self.connection_session
-                        and self.context().get("active")):
-                    self.revoked = True
-                    self.direction = (0.0, 0.0)
-                self.connection_session = data.get("session")
                 self.snapshot, self.status_received = data, time.monotonic()
                 if not self.ready():
                     self.direction = (0.0, 0.0)
