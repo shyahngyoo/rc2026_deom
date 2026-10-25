@@ -12,7 +12,8 @@
 | 你的现场状态 | 按顺序执行 | 完成后得到什么 |
 |---|---|---|
 | 小电脑刚装好系统 | 1 → 2 → 3 | 已安装的程序和真实雷达数据 |
-| 雷达已经正常，没有现场地图 | 4 → 5 | 实际场地 PCD、地图起点记录和二维图初稿 |
+| 雷达已经正常，没有现场地图，只想先定位与采点 | 4 → 6 → 8 | 实际场地 PCD、定位结果和现场点位 |
+| 还要检查 Nav2 规划 | 4 → 5 → 6 → 7 | 三维图、二维图和规划诊断结果 |
 | 已有本场地图，希望定位 | 6 | 新鲜定位证据、机体位置和 RViz 对齐图 |
 | 希望检查导航规划 | 7 | 实际地图中的路径与私有诊断速度；机器马不会自动走 |
 | 要设置 Hurricane 八类障碍 | 8 | 实测采点、审核后的路线和标定技能文件 |
@@ -170,6 +171,26 @@ ros2 topic hz /livox/imu
 
 ## 4. 用真实场地建图，并记录地图起点
 
+**已填写过 IP、IMU 外参和 footprint 的用户从这里继续，不要重跑第 3.2 节。**
+先在终端 B 查看实际保存的配置：
+
+```bash
+python3 - <<'PY'
+from pathlib import Path
+import yaml
+p = yaml.safe_load((Path.home() / '.config/rc2026/profile.yaml').read_text())
+for key in ('host_ip', 'lidar_ip', 'imu_in_base', 'footprint', 'map_pcd', 'initial_pose', 'nav_map'):
+    print(f'{key}: {p.get(key)}')
+PY
+ros2 run go2_onboard_bringup doctor \
+  --config-dir "$HOME/.config/rc2026" --mode odometry
+```
+
+确认 `configuration_valid:true`，并先完成第 3.3 节的实际雷达收包检查。
+`map_pcd`、`initial_pose`、`nav_map` 此时为 `null` 不代表需要重填 IP 或安装外参。
+已经有经过核对的本场地图和起点记录，可以跳过重复建图，转到第 6 节。
+以下 A、B、C 都指机载电脑上的终端；用 ToDesk 打开它们也一样，每个新终端先执行第 2 节的两条 `source`。
+
 ### 4.1 先保持机器人在可复现的起点
 
 在现场标记建图起点与朝向，记录雷达安装状态。启动时保持机体静止，等待 FAST-LIO 初始化；之后由已有底层/人工控制在场地中移动采集。本项目在此阶段不自动驱动建图。
@@ -235,7 +256,8 @@ FRAME odom
 
 ## 5. 制作同一坐标系的二维导航图
 
-定位使用三维 PCD，Nav2 使用二维 `field.yaml + field.pgm`，两者都要准备。
+定位使用三维 PCD，Nav2 还需要二维 `field.yaml + field.pgm`。
+**只做定位和采点时，本节可以暂时跳过，直接进入第 6 节。** 后续使用 Nav2 时再完成本节。
 
 在终端 B 输入实际路径和依据实测高度选择的障碍切片：
 
@@ -252,6 +274,9 @@ ls -lh "$HOME/rc2026_maps/field.yaml" "$HOME/rc2026_maps/field.pgm"
 应输出两份文件。检查地面是否被误当障碍、通道是否保留、边界是否正确。投影工具可能把未观察区域也输出为 free，必须人工审核可通行范围及未知区域。不要独立平移/旋转 PGM 后仍沿用原 YAML 原点；PCD、二维图和采点必须使用同一 `map`。
 
 ## 6. 在真实地图中定位
+
+本节只补已有配置缺少的地图和当前初始位姿，不要求重新测量或填写已确认的 IP、安装外参、机体轮廓。
+先在 A 停止之前的 lidar/odometry/navigation 启动程序，等待退出；配置更新时不要同时运行这些节点。
 
 ### 6.1 准备地图中的 IMU 初始位姿
 
@@ -279,21 +304,78 @@ PY
 
 机器人换了起点、朝向、雷达安装或地图坐标后，这个旧记录就不能代表当前初始位姿。Hurricane 入口采点保存的是 `base_footprint` 的平面位姿，也不能直接拿来填 IMU 六维初始位姿。
 
-### 6.2 生成定位配置
+### 6.2 保留已有参数，只补地图与初始位姿
 
-以下块重新询问完整输入，适合在新终端直接执行。先确认要替换第 3 节配置，并保留备份。`--force` 会重建所有生成文件，不是合并更新；已手调的参数需另行记录，遗漏二维图或 footprint 会清空这些字段：
+需要你新提供的内容只有：
+
+| 输入项 | 本次应填写什么 |
+|---|---|
+| PCD 路径 | 第 4.3 节实际输出的 `SAVED` 文件路径 |
+| 当前 IMU 地图位姿 | 第 6.1 节确认的六个数，顺序 `x y z roll pitch yaw`，米/弧度 |
+| 二维地图 YAML | 做过第 5 节时填写，例如 `~/rc2026_maps/field.yaml`；仅定位采点时可留空 |
+
+**安装外参全零不等于地图初始位姿全零。** 只有机器人实际处在地图对应原点且朝向也一致时，初始位姿才可能为零。
+
+下面整块复制执行。三个提示都支持回车保留已有值；首次配置的 PCD 和初始位姿不能留空。
+脚本从 `profile.yaml` 读取现有 IP、外参、footprint，保留其他配置文件及手调参数；
+只更新 `profile.yaml`、`gicp.yaml`，并把已有 footprint 同步到 `nav2.yaml` 的两处轮廓。
+原配置会备份，候选配置全部验证通过后才写入。不要再执行旧版指南里的 `configure_robot --force` 块。
 
 ```bash
-read -r -p '机载接收网卡 IPv4: ' MID360_HOST_IP
-read -r -p 'MID-360 IPv4: ' MID360_LIDAR_IP
-read -r -a IMU_IN_BASE -p '实测 IMU 安装 x y z roll pitch yaw: '
-read -r -p '实际 PCD 绝对路径: ' REAL_PCD
-read -r -a INITIAL_IMU_POSE -p '当前 IMU 在地图中 x y z roll pitch yaw: '
-ros2 run go2_onboard_bringup configure_robot --force \
-  --config-dir "$HOME/.config/rc2026" --stage localization \
-  --host-ip "$MID360_HOST_IP" --lidar-ip "$MID360_LIDAR_IP" \
-  --imu-in-base "${IMU_IN_BASE[@]}" \
-  --map-pcd "$REAL_PCD" --initial-pose "${INITIAL_IMU_POSE[@]}"
+read -r -p '实际 PCD 路径（回车保留原值）: ' REAL_PCD
+read -r -p '当前 IMU 地图 x y z roll pitch yaw（回车保留原值）: ' INITIAL_IMU_POSE
+read -r -p '二维地图 YAML 路径（未制作可回车，保留原值）: ' REAL_NAV_MAP
+python3 - "$REAL_PCD" "$INITIAL_IMU_POSE" "$REAL_NAV_MAP" <<'PY'
+from pathlib import Path
+from datetime import datetime
+import json, os, shutil, sys, tempfile, yaml
+from go2_onboard_bringup.profile import load_profile
+
+folder = Path.home() / '.config/rc2026'
+p = yaml.safe_load((folder / 'profile.yaml').read_text())
+if sys.argv[1].strip():
+    p['map_pcd'] = str(Path(sys.argv[1].strip()).expanduser().resolve())
+if sys.argv[2].strip():
+    p['initial_pose'] = [float(v) for v in sys.argv[2].split()]
+if sys.argv[3].strip():
+    p['nav_map'] = str(Path(sys.argv[3].strip()).expanduser().resolve())
+if p.get('map_pcd') is None or p.get('initial_pose') is None:
+    raise SystemExit('缺少 PCD 或当前 IMU 地图初始位姿；未修改配置。')
+
+with tempfile.TemporaryDirectory(prefix='rc2026-check-', dir=folder.parent) as temporary:
+    candidate = Path(temporary) / 'config'
+    shutil.copytree(folder, candidate)
+    gicp = yaml.safe_load((candidate / 'gicp.yaml').read_text())
+    params = gicp['gicp_localizer']['ros__parameters']
+    params['initial_pose_enabled'] = True
+    params['initial_pose'] = p['initial_pose']
+    changed = {'profile.yaml': p, 'gicp.yaml': gicp}
+    if p.get('footprint') is not None:
+        nav = yaml.safe_load((candidate / 'nav2.yaml').read_text())
+        for name in ('local_costmap', 'global_costmap'):
+            nav[name][name]['ros__parameters']['footprint'] = json.dumps(p['footprint'])
+        changed['nav2.yaml'] = nav
+    for name, data in changed.items():
+        (candidate / name).write_text(yaml.safe_dump(data, sort_keys=False))
+    load_profile(candidate, 'localization')
+    if p.get('nav_map') is not None and p.get('footprint') is not None:
+        load_profile(candidate, 'navigation')
+    backup = folder.with_name(folder.name + '.backup.' + datetime.now().strftime('%Y%m%d_%H%M%S_%f'))
+    shutil.copytree(folder, backup)
+    print('BACKUP:', backup)
+    for name in changed:
+        os.replace(candidate / name, folder / name)
+print('UPDATED: IP、安装外参和既有轮廓均保留；定位配置已验证。')
+for key in ('map_pcd', 'initial_pose', 'nav_map', 'footprint'):
+    print(f'{key}: {p.get(key)}')
+PY
+```
+
+看到 `UPDATED` 后，再执行检查；出现异常或缺文件时先处理报错，不进入启动步骤。
+该脚本保留 YAML 参数值，但重新写入的文件不保留 YAML 注释，原文件可在打印出的备份目录找到。
+如果更换了地图，必须核对并同步二维图及后续采点文件，不能把旧地图路径当作有效配套数据。
+
+```bash
 ros2 run go2_onboard_bringup doctor \
   --config-dir "$HOME/.config/rc2026" --mode localization
 ```
@@ -337,22 +419,16 @@ rviz2 -d "$(ros2 pkg prefix go2_real_localization)/share/go2_real_localization/r
 
 这一阶段使用真实定位和实测地图，**控制速度仍隔离在 `/onboard/nav_cmd_*`，机器马不会按目标自行走**。它用于检查路径、TF、footprint 和规划入口。
 
-先在 A 停止 localization。B 重新生成包含二维图与机体包络的完整配置：
+**本节是可选诊断，不是采点的前置条件。** 只想采点时，完成第 6.3 节后直接进入第 8 节。
+
+需要规划诊断时，先在 A 停止 localization。确认已完成第 5 节并在 `profile.yaml` 保存了实测 footprint。
+若第 6.2 节已填写二维图路径，不需要再次更新配置。若刚制作二维图，重跑第 6.2 节更新块，
+PCD 和初始位姿仍正确时在前两个提示直接回车，只填写第三项二维图路径。
+更换了起始位置或朝向，则同时更新第二项；不必重填 IP、外参和轮廓。
+
+B 检查配置：
 
 ```bash
-read -r -p '机载接收网卡 IPv4: ' MID360_HOST_IP
-read -r -p 'MID-360 IPv4: ' MID360_LIDAR_IP
-read -r -a IMU_IN_BASE -p '实测 IMU 安装 x y z roll pitch yaw: '
-read -r -p '实际 PCD 绝对路径: ' REAL_PCD
-read -r -a INITIAL_IMU_POSE -p '当前 IMU 在地图中 x y z roll pitch yaw: '
-read -r -p '二维地图 YAML 绝对路径: ' REAL_NAV_MAP
-read -r -p '实测 footprint JSON（例如语法 [[x1,y1],[x2,y2],[x3,y3]]，输入实际数字）: ' REAL_FOOTPRINT
-ros2 run go2_onboard_bringup configure_robot --force \
-  --config-dir "$HOME/.config/rc2026" --stage localization \
-  --host-ip "$MID360_HOST_IP" --lidar-ip "$MID360_LIDAR_IP" \
-  --imu-in-base "${IMU_IN_BASE[@]}" \
-  --map-pcd "$REAL_PCD" --initial-pose "${INITIAL_IMU_POSE[@]}" \
-  --nav-map "$REAL_NAV_MAP" --footprint "$REAL_FOOTPRINT"
 ros2 run go2_onboard_bringup doctor \
   --config-dir "$HOME/.config/rc2026" --mode navigation
 ```
@@ -422,7 +498,10 @@ ros2 topic echo /navigate_to_pose/_action/status action_msgs/msg/GoalStatusArray
 
 ## 8. 在真实赛场采点，导出 Hurricane 路线
 
-保持第 6 或第 7 节的真实全局定位正常；先取消诊断目标。采点时使用已有的人工/底层控制方式移动机体，本工具只记录坐标，不驱动它到点。
+保持第 6 或第 7 节的真实全局定位正常，**不要为采点再启动第二套雷达/定位，也不要重生成机器人配置**。
+从第 6 节直接过来时，在 B 打开采点面板即可；从第 7 节过来时，先按第 7 节末尾的方法取消诊断目标并确认终态。
+采点时由 STM 电控组或已有人工控制方式移动机体，本工具只记录坐标，不驱动它到点；
+坐标写入独立的 `~/rc2026_field/field.yaml`，不会替换 `~/.config/rc2026/profile.yaml`。
 
 ### 8.1 需要采什么
 
@@ -449,7 +528,7 @@ ros2 run robocon_mission capture_panel \
 
 在窗口中先点“采集起点 start”“采集场地轴终点 finish”，随后每个障碍依次点“原点 begin”“入口 entry”“出口 exit”；窗口应显示已采集数量直至 `26/26`。采点会立即写入指定 field.yaml。只有按要求采齐、核对坐标后才导出。修改地图或地图原点后需要重新检查全部点，不能继续复用旧场地坐标。
 
-已有独立测量的地图点，也可逐点录入；以下会询问实际标签和实际坐标：
+**面板采集与下面的手动录入是两种替代方式，同一个点不必做两次。** 已有独立测量的地图点，也可逐点录入；以下会询问实际标签和实际坐标：
 
 ```bash
 read -r -p '点标签（例如 bridge_a.entry）: ' POINT_LABEL
@@ -462,6 +541,8 @@ ros2 run robocon_mission hurricane_capture \
 手动录入功能无法验证你给出的点是否实测，录入责任仍在现场操作人员。不要复制参考模板里的坐标充当已完成采点。
 
 ### 8.3 导出并检查
+
+采齐并核对 26 个点后执行下面的导出命令。如果已经通过面板导出了同名文件，不需要重复导出，直接预览并核对结果即可。
 
 ```bash
 ros2 run robocon_mission hurricane_capture \
@@ -523,7 +604,7 @@ ros2 service call /mission/start std_srvs/srv/Trigger '{}'
 
 1. 连接设备、确认雷达安装没变，把机器人放到已知地图起点。
 2. A、B 分别加载第 2 节环境。
-3. 核对当前 `~/.config/rc2026/profile.yaml` 的地图和 IMU 起点是否符合实际位置；起点改变需重新生成配置。
+3. 核对当前 `~/.config/rc2026/profile.yaml` 的地图和 IMU 起点是否符合实际位置；起点改变时用第 6.2 节仅更新地图初始位姿，不重填安装外参。
 4. A 启动 `mode:=localization`；需要规划检查则启动 `mode:=navigation`，只选一个。
 5. B 检查定位健康与 doctor 动态字段，C 按需启动对应 RViz。
 6. 需要采点时用第 8 节；需要真实运动时先满足第 9 节生产接入条件。
