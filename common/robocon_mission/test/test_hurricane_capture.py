@@ -21,6 +21,69 @@ def complete_field():
     return field
 
 
+def subset_field(*skills):
+    full = complete_field()
+    labels = ['start', 'finish'] + [f'{s}.{p}' for s in skills for p in ('begin', 'entry', 'exit')]
+    return FieldCalibration({label: full.samples[label] for label in labels})
+
+
+def test_selected_obstacle_exports_with_five_points(tmp_path):
+    field = subset_field('bridge_b')
+    source = Path(__file__).resolve().parent.parent / 'config/hurricane_skills.yaml'
+    route = field.export_route(tmp_path / 'route.yaml', ['bridge_b'])
+    skills = field.export_skills(source, tmp_path / 'skills.yaml', ['bridge_b'])
+    assert [task.id for task in RouteManager.load(route).tasks] == ['bridge_b']
+    data = yaml.safe_load(skills.read_text())
+    assert list(data['skills']) == ['bridge_b']
+    assert data['skills']['bridge_b']['calibrated']
+    field.save(tmp_path / 'field.yaml')
+    assert not FieldCalibration.load(tmp_path / 'field.yaml').calibrated
+
+
+def test_selected_anchor_requires_only_origin_without_exporting_dependency(tmp_path):
+    field = subset_field('bridge_a')
+    source = Path(__file__).resolve().parent.parent / 'config/hurricane_skills.yaml'
+    output = tmp_path / 'skills.yaml'
+    output.write_text('previous output')
+    with pytest.raises(ValueError, match=r'bridge_b.begin'):
+        field.export_skills(source, output, ['bridge_a'])
+    assert output.read_text() == 'previous output'
+    field.record('bridge_b.begin', complete_field().samples['bridge_b.begin'])
+    field.export_skills(source, output, ['bridge_a'])
+    data = yaml.safe_load(output.read_text())
+    assert list(data['skills']) == ['bridge_a']
+    full = complete_field().export_skills(source, tmp_path / 'full.yaml')
+    assert data['skills']['bridge_a'] == yaml.safe_load(full.read_text())['skills']['bridge_a']
+
+
+@pytest.mark.parametrize('selection', [[], ['unknown'], ['bridge_a', 'bridge_a']])
+def test_invalid_selection_never_overwrites_output(tmp_path, selection):
+    output = tmp_path / 'route.yaml'
+    output.write_text('previous output')
+    with pytest.raises(ValueError):
+        complete_field().export_route(output, selection)
+    assert output.read_text() == 'previous output'
+
+
+def test_subset_cli_uses_course_order_and_preserves_capture_store(tmp_path):
+    field = subset_field('bridge_b', 'step')
+    path = field.save(tmp_path / 'field.yaml')
+    before = path.read_bytes()
+    route, skills = tmp_path / 'route.yaml', tmp_path / 'skills.yaml'
+    main(['--file', str(path), '--select', 'step', 'bridge_b',
+          '--export-route', str(route), '--export-skills', str(skills)])
+    assert [task.id for task in RouteManager.load(route).tasks] == ['bridge_b', 'step']
+    assert list(yaml.safe_load(skills.read_text())['skills']) == ['bridge_b', 'step']
+    assert path.read_bytes() == before
+
+
+def test_selected_missing_entry_is_reported(tmp_path):
+    field = subset_field('bridge_b')
+    del field.samples['bridge_b.entry']
+    with pytest.raises(ValueError, match=r'bridge_b.entry'):
+        field.export_route(tmp_path / 'route.yaml', ['bridge_b'])
+
+
 @pytest.mark.parametrize("pose", [
     [math.nan, 0, 0], [0, math.inf, 0], [0, 0, -math.inf],
     [0, True, 0], [0, "1", 0], [0, 0], {"x": 0, "y": 0},

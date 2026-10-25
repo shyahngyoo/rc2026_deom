@@ -30,6 +30,23 @@ LABELS = ("start", "finish") + tuple(
 )
 
 
+def selected_skills(skills=None):
+    """Selection filters the established course order; it does not reorder it."""
+    if skills is None:
+        return SKILL_IDS
+    if not skills or any(skill not in SKILL_IDS for skill in skills):
+        raise ValueError('select at least one known obstacle')
+    if len(set(skills)) != len(skills):
+        raise ValueError('duplicate selected obstacle')
+    return tuple(skill for skill in SKILL_IDS if skill in skills)
+
+
+def required_labels(skills=None):
+    return ('start', 'finish') + tuple(
+        f'{skill}.{part}' for skill in selected_skills(skills)
+        for part in ('begin', 'entry', 'exit'))
+
+
 def _pose(value, label):
     if isinstance(value, dict):
         if any(key not in value for key in ("x", "y", "yaw")):
@@ -74,7 +91,7 @@ def _write_yaml(path, data, comment):
 
 
 class FieldCalibration:
-    """ROS-independent map sample store with strict complete-field exports."""
+    """Map sample store; exports require complete geometry for selected skills."""
 
     def __init__(self, samples=None, metadata=None):
         self.samples = {}
@@ -115,9 +132,10 @@ class FieldCalibration:
             return False
         return True
 
-    def _require_complete(self):
-        if self.missing:
-            raise ValueError("missing map samples: " + ", ".join(self.missing))
+    def _require_complete(self, selected=None):
+        missing = [label for label in required_labels(selected) if label not in self.samples]
+        if missing:
+            raise ValueError("missing map samples: " + ", ".join(missing))
         # Revalidate in case a caller modified the public samples dictionary.
         for label, pose in self.samples.items():
             if label not in LABELS:
@@ -163,8 +181,9 @@ class FieldCalibration:
             raise ValueError("calibrated field file has incomplete/invalid samples")
         return result
 
-    def export_route(self, path):
-        self._require_complete()
+    def export_route(self, path, selected=None):
+        selected = selected_skills(selected)
+        self._require_complete(selected)
         tasks = [{
             "id": skill,
             "type": "obstacle",
@@ -174,7 +193,7 @@ class FieldCalibration:
             "skill_id": skill,
             "timeout": 180.0,
             "max_retries": 0,
-        } for skill in SKILL_IDS]
+        } for skill in selected]
         return _write_yaml(path, {
             "start_area": "hurricane_calibrated_start",
             "frame_id": "map",
@@ -182,14 +201,18 @@ class FieldCalibration:
             "return": {"pose": list(self.samples["start"])},
         }, "# Site-captured map route. Axis end is not a navigation goal.")
 
-    def export_skills(self, profile_path, out_path):
-        axis_yaw = self._require_complete()
+    def export_skills(self, profile_path, out_path, selected=None):
+        selected = selected_skills(selected)
+        axis_yaw = self._require_complete(selected)
         profile = _read_yaml(profile_path)
         skills = profile.get("skills")
-        if not isinstance(skills, dict) or any(skill not in skills for skill in SKILL_IDS):
-            raise ValueError("skill profile must contain all eight hurricane skills")
+        if not isinstance(skills, dict) or any(skill not in skills for skill in selected):
+            scope = 'all eight' if selected == SKILL_IDS else 'all selected'
+            raise ValueError(f"skill profile must contain {scope} hurricane skills")
+        skills = {skill: skills[skill] for skill in selected}
+        profile['skills'] = skills
         warnings = []
-        for skill in SKILL_IDS:
+        for skill in selected:
             if not isinstance(skills[skill], dict):
                 raise ValueError(f"skill {skill} must be a mapping")
             begin = self.samples[f"{skill}.begin"]
@@ -220,6 +243,9 @@ class FieldCalibration:
                     raise ValueError(f"{label}.target must be [x, y, yaw degrees or null]")
                 yaw = (None if target[2] is None else
                        _pose([0, 0, target[2]], label + ".yaw")[2])
+                if f'{anchor}.begin' not in self.samples:
+                    raise ValueError(f'{label} requires map sample {anchor}.begin; '
+                                     'capture the anchor origin without selecting its obstacle')
                 anchor_begin = self.samples[f"{anchor}.begin"]
                 dx, dy = anchor_begin[0] - begin[0], anchor_begin[1] - begin[1]
                 # Convert surveyed map displacement to hurricane's reflected
@@ -282,8 +308,10 @@ def _parser():
     parser.add_argument("--label", choices=LABELS, help="sample label")
     parser.add_argument("--pose", nargs=3, type=float, metavar=("X", "Y", "YAW"),
                         help="manual map pose; metres and radians")
-    parser.add_argument("--export-route", metavar="YAML", help="export complete competition route")
-    parser.add_argument("--export-skills", metavar="YAML", help="export complete calibrated skills")
+    parser.add_argument("--select", nargs='+', choices=SKILL_IDS,
+                        help="export only these obstacles, in standard course order (default: all)")
+    parser.add_argument("--export-route", metavar="YAML", help="export selected competition route")
+    parser.add_argument("--export-skills", metavar="YAML", help="export selected calibrated skills")
     parser.add_argument("--skills-profile", default=_default_skills_profile(),
                         help="source hurricane_skills.yaml for skill export")
     parser.add_argument("--panel", action="store_true", help="show ROS TF capture panel")
@@ -318,6 +346,11 @@ def _run_panel(calibration, options, ros_args):
         root.title("Hurricane 现场采点 · map")
         status = tk.StringVar(value="等待 map → " + options.base_frame + " TF")
         progress = tk.StringVar()
+        selections = {skill: tk.BooleanVar(value=skill in selected_skills(options.select))
+                      for skill in SKILL_IDS}
+
+        def selection():
+            return [skill for skill in SKILL_IDS if selections[skill].get()]
         tk.Label(root, text="起点与轴终点定义场地 +X 轴。各点 yaw 为 ROS map 弧度。",
                  wraplength=660).grid(row=0, column=0, columnspan=4, padx=10, pady=8)
         tk.Label(root, textvariable=status, wraplength=660).grid(
@@ -344,8 +377,12 @@ def _run_panel(calibration, options, ros_args):
             return _pose([translation.x, translation.y, yaw], "map TF")
 
         def update_progress():
-            progress.set(f"已采集 {len(calibration.samples)}/{len(LABELS)} 点；"
-                         + ("可导出完整路线" if calibration.calibrated else "等待完整标定"))
+            if not selection():
+                progress.set('请至少选择一个障碍')
+                return
+            labels = required_labels(selection())
+            count = sum(label in calibration.samples for label in labels)
+            progress.set(f"所选障碍基础点 {count}/{len(labels)}；技能锚点依赖在导出时检查")
 
         def capture(label):
             try:
@@ -361,7 +398,8 @@ def _run_panel(calibration, options, ros_args):
         tk.Button(root, text="采集场地轴终点 finish", command=lambda: capture("finish")).grid(
             row=3, column=2, columnspan=2, sticky="ew", padx=4, pady=4)
         for index, (skill, name) in enumerate(zip(SKILL_IDS, SKILL_NAMES), start=4):
-            tk.Label(root, text=name).grid(row=index, column=0, sticky="w", padx=8)
+            tk.Checkbutton(root, text=name, variable=selections[skill],
+                           command=update_progress).grid(row=index, column=0, sticky="w", padx=8)
             for column, (part, name_part) in enumerate(
                     (("begin", "原点 begin"), ("entry", "入口 entry"),
                      ("exit", "出口 exit")), start=1):
@@ -376,18 +414,18 @@ def _run_panel(calibration, options, ros_args):
                     path = calibration.save(options.file)
                 elif action == "route":
                     path = calibration.export_route(options.export_route or
-                        str(Path(options.file).with_name("hurricane_route_calibrated.yaml")))
+                        str(Path(options.file).with_name("hurricane_route_calibrated.yaml")), selection())
                 else:
                     path = calibration.export_skills(options.skills_profile,
                         options.export_skills or
-                        str(Path(options.file).with_name("hurricane_skills_calibrated.yaml")))
+                        str(Path(options.file).with_name("hurricane_skills_calibrated.yaml")), selection())
                 status.set("已保存：" + str(path))
             except (ValueError, OSError) as error:
                 messagebox.showerror("导出失败", str(error), parent=root)
 
         for column, (text, action) in enumerate(
-                (("保存采点", "save"), ("导出完整路线", "route"),
-                 ("导出技能标定", "skills"))):
+                (("保存采点", "save"), ("导出所选路线", "route"),
+                 ("导出所选技能", "skills"))):
             tk.Button(root, text=text, command=lambda action=action: output(action)).grid(
                 row=12, column=column, sticky="ew", padx=4, pady=8)
         update_progress()
@@ -430,6 +468,7 @@ def main(args=None):
     if options.base_frame.strip() in ("", "map"):
         parser.error("--base-frame must be a robot frame different from map")
     try:
+        selected = selected_skills(options.select)
         calibration = (FieldCalibration.load(options.file) if Path(options.file).exists()
                        else FieldCalibration())
         if options.pose:
@@ -440,13 +479,14 @@ def main(args=None):
             _run_panel(calibration, options, ros_args)
             return
         if options.export_route:
-            calibration.export_route(options.export_route)
+            calibration.export_route(options.export_route, selected)
             print("Exported route: " + options.export_route)
         if options.export_skills:
-            calibration.export_skills(options.skills_profile, options.export_skills)
+            calibration.export_skills(options.skills_profile, options.export_skills, selected)
             print("Exported calibrated skills: " + options.export_skills)
         if not any((options.pose, options.export_route, options.export_skills)):
-            print("Missing map samples: " + ", ".join(calibration.missing))
+            print("Missing map samples: " + ", ".join(
+                label for label in required_labels(selected) if label not in calibration.samples))
     except (ValueError, OSError, RuntimeError) as error:
         parser.error(str(error))
 

@@ -512,7 +512,9 @@ ros2 topic echo /navigate_to_pose/_action/status action_msgs/msg/GoalStatusArray
 | 每个障碍 `.entry` | 导航停稳并对准的技能入口 |
 | 每个障碍 `.exit` | 真实越障结束后用于独立验收的位置 |
 
-八个障碍 ID 是 `bridge_a`、`bridge_b`、`big_slope`、`limit_pole`、`bunker`、`pole`、`high_wall`、`step`。共 26 点，记录时机器人需处在对应位置且定位有效。这里的点使用 `map→base_footprint`，不是 IMU 初猜。
+八个障碍 ID 是 `bridge_a`、`bridge_b`、`big_slope`、`limit_pole`、`bunker`、`pole`、`high_wall`、`step`。
+默认全选时共 26 点；只导出 N 个障碍时，基础点为 `2 + 3×N` 个。
+记录时机器人需处在对应位置且定位有效。这里的点使用 `map→base_footprint`，不是 IMU 初猜。
 
 ### 8.2 打开采点面板
 
@@ -526,7 +528,9 @@ ros2 run robocon_mission capture_panel \
   --file "$HOME/rc2026_field/field.yaml"
 ```
 
-在窗口中先点“采集起点 start”“采集场地轴终点 finish”，随后每个障碍依次点“原点 begin”“入口 entry”“出口 exit”；窗口应显示已采集数量直至 `26/26`。采点会立即写入指定 field.yaml。只有按要求采齐、核对坐标后才导出。修改地图或地图原点后需要重新检查全部点，不能继续复用旧场地坐标。
+窗口左侧复选框选择要导出的障碍，默认全选。先采“起点 start”“场地轴终点 finish”，随后采所选障碍的“原点 begin”“入口 entry”“出口 exit”。全选时基础点进度为 `26/26`，单障碍为 `5/5`。
+采点会立即写入指定 field.yaml。取消勾选不会删除已采数据，依赖点仍可通过对应按钮采集。
+只有按要求采齐、核对坐标后才导出。修改地图或地图原点后需要重新检查全部点，不能继续复用旧场地坐标。
 
 **面板采集与下面的手动录入是两种替代方式，同一个点不必做两次。** 已有独立测量的地图点，也可逐点录入；以下会询问实际标签和实际坐标：
 
@@ -542,7 +546,7 @@ ros2 run robocon_mission hurricane_capture \
 
 ### 8.3 导出并检查
 
-采齐并核对 26 个点后执行下面的导出命令。如果已经通过面板导出了同名文件，不需要重复导出，直接预览并核对结果即可。
+全选时采齐并核对 26 个点后执行下面的导出命令。如果已经通过面板导出了同名文件，不需要重复导出，直接预览并核对结果即可。
 
 ```bash
 ros2 run robocon_mission hurricane_capture \
@@ -557,6 +561,32 @@ ros2 run robocon_mission hurricane_preview \
 预览只读取配置，不发送串口动作。检查导出的各障碍入口、出口、朝向、阶段与 `calibration.warnings`，尤其检查技能末航点是否与实测出口匹配。这里的 `calibrated` 表示几何配置已导出，不表示已通过实机动作验收。
 
 Hurricane 源坐标的左右方向与 ROS 不同，工具内部已转换；外部手工录入使用 ROS 地图坐标和 rad，不要再次自行把 y 或 yaw 取负。完整协议和反馈定义见 [HURRICANE_PORT.md](../common/robocon_mission/HURRICANE_PORT.md)。
+
+### 8.4 只导出所选障碍
+
+例如只测试木桥 B，采齐 `start`、`finish`、`bridge_b.begin`、`bridge_b.entry`、`bridge_b.exit` 后执行：
+
+```bash
+ros2 run robocon_mission hurricane_capture \
+  --file "$HOME/rc2026_field/field.yaml" \
+  --select bridge_b \
+  --export-route "$HOME/rc2026_field/bridge_b_route.yaml" \
+  --export-skills "$HOME/rc2026_field/bridge_b_skills.yaml"
+```
+
+多个障碍用空格分隔，例如 `--select bridge_b step`；不传 `--select` 保持原来的完整八障碍导出。
+导出按原赛道顺序过滤，不按命令行参数顺序重新排序。输出路线和技能文件仅含所选障碍，返回点仍为 `start`。
+运行 Mission 时需加载这两份对应文件，并让预检查的必需技能列表与所选障碍一致。
+
+面板也可预选：`ros2 run robocon_mission capture_panel --file "$HOME/rc2026_field/field.yaml" --select bridge_b`，
+打开后可继续勾选或取消。单个 `field.yaml` 可以一直累计保存全场点位；文件的 `calibrated` 标记仍表示全场是否采齐，
+部分采点时该标记为 false 不妨碍所选障碍通过校验后导出。
+
+**技能模板的跨障碍锚点仍需实测。** 当前木桥 A 模板引用 `bridge_b.begin`：只选 `bridge_a` 时，
+除其 5 个基础点外，还需采 `bridge_b.begin`，不需要采木桥 B 的入口、出口，也不会把木桥 B 加进路线。
+缺少锚点会报出具体标签并拒绝生成技能文件，不会填入示例坐标。路线导出仅验证路线点位，技能导出另检查模板依赖；
+若同一命令中技能导出失败，路线文件可能已生成，必须解决报错并成功导出两份配套文件后再使用。
+更改选择不会自动调整模板内的前进距离、转向和跳跃步骤，也不会改变 begin 同时作为技能原点与导航过渡点的现有含义。
 
 ## 9. 要让机器马真正自动走和越障，还需完成的接线与接口
 
