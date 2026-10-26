@@ -1,5 +1,7 @@
 # RC2026 机器马机载导航与 Mission 后端
 
+> **新版 CyberGear 按键固件实机联调**：使用独立 `cybergear_auto.launch.py`，见 [CyberGear 现场操作简版](docs/CYBERGEAR_QUICK_START.md)。支持统一面板、八类障碍模板、采点生成任务、快速里程计、状态回传与定位航点；不要求固件实现下述旧 v1 草案。
+
 > STM32 接入更新：自制机器人不支持横移。新增单串口网关默认禁用运动；Hurricane 实机改走共享网关。协议为待固件实现草案，见 [STM32 接入指南](docs/STM32_BRIDGE_GUIDE.md)。下文原有定位/规划诊断入口继续保留。
 
 
@@ -34,7 +36,8 @@ bash tools/install_real.bash --jobs 2
 | 实际建图与局部里程计 | `mode:=odometry` | FAST-LIO、机体状态适配，支持保存现场 PCD |
 | 实际场地全局定位 | `mode:=localization` | 加载实际 PCD 和 IMU 初猜，GICP 与定位证据 |
 | Nav2 路径/控制诊断 | `mode:=navigation` | 真实地图与定位；速度仅在 `/onboard/nav_cmd_*` |
-| 八障碍采点与技能导出 | `capture_panel`、`hurricane_capture` | 现场 26 点、路线与技能配置；面板需要图形会话 |
+| 新版场地自动化面板 | `operator_panel` | 选择/排序/重复障碍、实测采点、模板调参、单障碍或整路线运行 |
+| 原八障碍采点与技能导出 | `capture_panel`、`hurricane_capture` | 现场 26 点、路线与技能配置；面板需要图形会话 |
 | 串口握手与状态诊断 | `stm32_bringup.launch.py port:=...` | 新协议草案，默认关闭运动输出，不启动 Mission |
 | Hurricane 技能适配 | `hurricane.launch.py` | 独立预览默认 dry-run；实机使用共享 STM32 网关 |
 

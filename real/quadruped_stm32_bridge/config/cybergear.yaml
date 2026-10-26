@@ -1,0 +1,10 @@
+cybergear_bridge:
+  ros__parameters:
+    baudrate: 115200
+    status_timeout: 0.5
+    pose_timeout: 0.5
+    map_frame: map
+    base_frame: base_footprint
+    distance_tolerance: 0.12
+    heading_tolerance: 0.15
+    key_interval: 0.2

@@ -1,0 +1,452 @@
+# ROS local axes; x/y metres, target yaw degrees. null locks the live coordinate at step entry.
+# bridge_a/bridge_b retain the source handlers actual mode keys, not their misleading names.
+version: 1
+templates:
+  bridge_a:
+    name: 木桥A
+    note: 原 handler 名称与使用的木桥B模式交叉，保留实际动作和模式设计。
+    steps:
+    - type: mode
+      key: 10
+    - type: wait
+      duration_s: 1.0
+    - type: local_waypoint
+      target:
+      - 1.8
+      - -0.0
+      - null
+      mode_key: 10
+      require_yaw: false
+    - type: mode
+      key: 9
+    - type: wait
+      duration_s: 1.0
+    - type: local_waypoint
+      target:
+      - null
+      - null
+      - 90.0
+      mode_key: 9
+    - type: mode
+      key: 11
+    - type: wait
+      duration_s: 1.0
+    - type: local_waypoint
+      target:
+      - null
+      - 0.35
+      - 90.0
+      mode_key: 11
+      heading_deg: 2.0
+    - type: mode
+      key: 11
+    - type: wait
+      duration_s: 1.0
+    - type: key
+      key: 6
+      duration_s: 5.0
+    - type: local_waypoint
+      target:
+      - null
+      - 1.32
+      - 90.0
+      mode_key: 11
+      heading_deg: 2.0
+    - type: mode
+      key: 11
+    - type: wait
+      duration_s: 1.0
+    - type: key
+      key: 6
+      duration_s: 5.0
+    - type: local_waypoint
+      target:
+      - null
+      - 2.47
+      - 90.0
+      mode_key: 11
+      heading_deg: 2.0
+    - type: mode
+      key: 11
+    - type: wait
+      duration_s: 1.0
+    - type: key
+      key: 6
+      duration_s: 5.0
+    - type: local_waypoint
+      target:
+      - null
+      - 3.1
+      - 90.0
+      mode_key: 11
+      heading_deg: 2.0
+    - type: mode
+      key: 11
+    - type: wait
+      duration_s: 1.0
+    - type: key
+      key: 7
+      duration_s: 5.0
+    - type: mode
+      key: 9
+    - type: wait
+      duration_s: 1.0
+    - type: local_waypoint
+      target:
+      - null
+      - null
+      - 180.0
+      mode_key: 9
+      heading_deg: 2.0
+    - type: mode
+      key: 11
+    - type: wait
+      duration_s: 1.0
+  bridge_b:
+    name: 木桥B
+    note: 原 handler 使用木桥A模式，保留该模式编号。
+    steps:
+    - type: mode
+      key: 12
+    - type: wait
+      duration_s: 1.0
+    - type: local_waypoint
+      target:
+      - -2.0
+      - -0.05
+      - 180.0
+      mode_key: 12
+      heading_deg: 2.0
+    - type: local_waypoint
+      target:
+      - -2.5
+      - -0.1
+      - 180.0
+      mode_key: 12
+      heading_deg: 1.0
+  big_slope:
+    name: 大斜坡
+    note: 原固定左转/右转覆盖会绕过几何误差判断，移植后按ROS误差转向。
+    steps:
+    - type: mode
+      key: 11
+    - type: wait
+      duration_s: 1.0
+    - type: local_waypoint
+      target:
+      - 0.2
+      - -0.0
+      - 180.0
+      mode_key: 11
+    - type: mode
+      key: 11
+    - type: wait
+      duration_s: 1.0
+    - type: key
+      key: 6
+      duration_s: 5.0
+    - type: mode
+      key: 13
+    - type: wait
+      duration_s: 1.0
+    - type: local_waypoint
+      target:
+      - null
+      - null
+      - -90.0
+      mode_key: 13
+    - type: local_waypoint
+      target:
+      - null
+      - -1.0
+      - null
+      mode_key: 13
+      reverse: true
+    - type: local_waypoint
+      target:
+      - null
+      - null
+      - 180.0
+      mode_key: 13
+    - type: local_waypoint
+      target:
+      - -2.9
+      - null
+      - null
+      mode_key: 13
+    - type: mode
+      key: 11
+    - type: wait
+      duration_s: 1.0
+    - type: key
+      key: 6
+      duration_s: 5.0
+    - type: mode
+      key: 9
+    - type: wait
+      duration_s: 1.0
+    - type: local_waypoint
+      target:
+      - -3.0
+      - -0.0
+      - 180.0
+      mode_key: 9
+  limit_pole:
+    name: 限高栏
+    note: Hurricane 模板；实机距离和动作时序需核对。
+    steps:
+    - type: mode
+      key: 9
+    - type: wait
+      duration_s: 1.0
+    - type: local_waypoint
+      target:
+      - 0.5
+      - -0.0
+      - 180.0
+      mode_key: 9
+    - type: mode
+      key: 14
+    - type: wait
+      duration_s: 1.0
+    - type: local_waypoint
+      target:
+      - -4.0
+      - -0.0
+      - 180.0
+      mode_key: 14
+  bunker:
+    name: 沙坑
+    note: 第三次跳跃前保留3秒最短准备时间；移除了原数组越界。
+    steps:
+    - type: mode
+      key: 9
+    - type: wait
+      duration_s: 1.0
+    - type: local_waypoint
+      target:
+      - 0.2
+      - null
+      - 180.0
+      mode_key: 9
+    - type: mode
+      key: 15
+    - type: wait
+      duration_s: 1.0
+    - type: key
+      key: 6
+      duration_s: 5.0
+    - type: local_waypoint
+      target:
+      - -1.1
+      - -0.04
+      - -135.0
+      mode_key: 15
+    - type: mode
+      key: 15
+    - type: wait
+      duration_s: 1.0
+    - type: key
+      key: 6
+      duration_s: 5.0
+    - type: local_waypoint
+      target:
+      - null
+      - -1.25
+      - -90.0
+      mode_key: 15
+    - type: mode
+      key: 15
+    - type: wait
+      duration_s: 3.0
+    - type: key
+      key: 6
+      duration_s: 5.0
+  pole:
+    name: 绕杆
+    note: Hurricane 模板；实机距离和动作时序需核对。
+    steps:
+    - type: mode
+      key: 9
+    - type: wait
+      duration_s: 1.0
+    - type: local_waypoint
+      target:
+      - 0.0
+      - 0.4
+      - -0.0
+      mode_key: 9
+      heading_deg: 7.0
+    - type: local_waypoint
+      target:
+      - 0.5
+      - 0.5
+      - -90.0
+      mode_key: 9
+      heading_deg: 7.0
+    - type: local_waypoint
+      target:
+      - 0.4
+      - -0.7
+      - -180.0
+      mode_key: 9
+      heading_deg: 7.0
+    - type: local_waypoint
+      target:
+      - -0.5
+      - -0.6
+      - -90.0
+      mode_key: 9
+      heading_deg: 7.0
+    - type: local_waypoint
+      target:
+      - -0.4
+      - -1.6
+      - -0.0
+      mode_key: 9
+      heading_deg: 7.0
+    - type: local_waypoint
+      target:
+      - 0.5
+      - -1.5
+      - 90.0
+      mode_key: 9
+      heading_deg: 7.0
+    - type: local_waypoint
+      target:
+      - 0.4
+      - -0.5
+      - -0.0
+      mode_key: 9
+      heading_deg: 7.0
+    - type: local_waypoint
+      target:
+      - 1.5
+      - -0.6
+      - -90.0
+      mode_key: 9
+      heading_deg: 7.0
+    - type: local_waypoint
+      target:
+      - 1.4
+      - -1.5
+      - -0.0
+      mode_key: 9
+      heading_deg: 7.0
+    - type: local_waypoint
+      target:
+      - 2.4
+      - -1.4
+      - 90.0
+      mode_key: 9
+      heading_deg: 7.0
+    - type: local_waypoint
+      target:
+      - 2.5
+      - -0.5
+      - -0.0
+      mode_key: 9
+      heading_deg: 7.0
+    - type: local_waypoint
+      target:
+      - 3.5
+      - -1.0
+      - -0.0
+      mode_key: 9
+      heading_deg: 7.0
+  high_wall:
+    name: 高墙
+    note: Hurricane 模板；实机距离和动作时序需核对。
+    steps:
+    - type: mode
+      key: 11
+    - type: wait
+      duration_s: 1.0
+    - type: local_waypoint
+      target:
+      - -0.2
+      - null
+      - -0.0
+      mode_key: 11
+    - type: mode
+      key: 17
+    - type: wait
+      duration_s: 1.0
+    - type: key
+      key: 6
+      duration_s: 5.0
+    - type: mode
+      key: 9
+    - type: wait
+      duration_s: 1.0
+    - type: local_waypoint
+      target:
+      - 1.0
+      - null
+      - -0.0
+      mode_key: 9
+  step:
+    name: 台阶
+    note: 原第二和第三航点混用了全局y；移植后null统一锁定障碍局部坐标。
+    steps:
+    - type: mode
+      key: 9
+    - type: wait
+      duration_s: 1.0
+    - type: local_waypoint
+      target:
+      - -0.15
+      - -0.0
+      - -0.0
+      mode_key: 9
+    - type: mode
+      key: 18
+    - type: wait
+      duration_s: 1.0
+    - type: key
+      key: 6
+      duration_s: 5.0
+    - type: mode
+      key: 9
+    - type: wait
+      duration_s: 1.0
+    - type: local_waypoint
+      target:
+      - 0.32
+      - null
+      - null
+      mode_key: 9
+    - type: mode
+      key: 18
+    - type: wait
+      duration_s: 1.0
+    - type: key
+      key: 7
+      duration_s: 5.0
+    - type: mode
+      key: 9
+    - type: wait
+      duration_s: 1.0
+    - type: local_waypoint
+      target:
+      - 0.62
+      - null
+      - null
+      mode_key: 9
+    - type: mode
+      key: 18
+    - type: wait
+      duration_s: 1.0
+    - type: key
+      key: 7
+      duration_s: 5.0
+    - type: mode
+      key: 9
+    - type: wait
+      duration_s: 1.0
+    - type: local_waypoint
+      target:
+      - 1.0
+      - -0.0
+      - -0.0
+      mode_key: 9
