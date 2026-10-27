@@ -118,7 +118,7 @@ def no_sim_time(data):
 def load_profile(config_dir,mode='lidar'):
     folder=Path(config_dir).expanduser().resolve()
     profile_file=folder/'profile.yaml'
-    if not profile_file.is_file():raise ValueError('configure_robot must create profile.yaml first: '+str(profile_file))
+    if not profile_file.is_file():raise ValueError('缺少机器人配置：'+str(profile_file)+'。本地只查看面板可关闭提示；实际建图 / 里程计请在连接雷达且已配置的机载电脑上运行。首次配置运行 ros2 run go2_onboard_bringup configure_robot --help，按实测 IP 和 IMU 外参生成配置。')
     profile=validate_profile(yaml.safe_load(profile_file.read_text()),mode)
     for name in FILES:existing_file(str(folder/name),'profile '+name)
     driver=json.loads((folder/'mid360.json').read_text())

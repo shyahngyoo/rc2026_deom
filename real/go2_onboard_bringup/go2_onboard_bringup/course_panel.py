@@ -16,8 +16,9 @@ class CoursePanel:
         self.templates=yaml.safe_load(default.read_text())['templates']
         self.course=dict(version=1,frame=parent.capture_frame,session=parent.odom_session,map_pcd=parent.values['map'].get(),obstacles=[])
         if self.path.exists():self.course=yaml.safe_load(self.path.read_text())
-        self.root=tk.Toplevel(parent.root);self.root.title('赛场配置：选障碍 → 采点 → 运行');self.root.geometry('1100x780')
+        self.root=tk.Toplevel(parent.root);self.root.title('赛场配置：选障碍 → 采点 → 运行');self.root.geometry('1180x820');self.root.minsize(1040,740)
         self.selected=None
+        ttk.Label(self.root,text='场地编排  /  选障碍 → 采点 → 单障碍调试 → 整条路线',font=('sans-serif',16,'bold'),padding=12).pack(anchor='w')
         top=ttk.Frame(self.root,padding=8);top.pack(fill='x')
         self.choices={k+' / '+v['name']:k for k,v in self.templates.items()}
         self.choice=tk.StringVar(value=next(iter(self.choices)))
@@ -47,7 +48,7 @@ class CoursePanel:
         for label,fn in [('添加入口前过渡点',self.transit),('清空过渡点',self.clear_transit),('导入旧 field 采点',self.import_field)]:
             ttk.Button(actions,text=label,command=lambda f=fn:self.guard(f)).pack(side='left',padx=2)
         ttk.Label(right,text='模板已填好。要调距离/转角/等待可编辑下方；target 为局部 x/y/角度(度)，null 保持当前分量。').pack(fill='x')
-        self.editor=tk.Text(right,wrap='none',height=24);self.editor.pack(fill='both',expand=True)
+        self.editor=tk.Text(right,wrap='none',height=18,bg='#15283b',fg='#dbe8f4',insertbackground='white',padx=10,pady=10);self.editor.pack(fill='both',expand=True)
         bottom=ttk.Frame(self.root,padding=8);bottom.pack(fill='x')
         for label,fn in [('生成并载入当前障碍',lambda:self.prepare(True)),('生成并载入启用路线',lambda:self.prepare(False)),
                          ('开始 / 从头重跑',lambda:parent.dispatch(parent.start_task)),('停止任务',lambda:parent.dispatch(parent.stop_task))]:

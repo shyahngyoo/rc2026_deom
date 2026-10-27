@@ -12,8 +12,13 @@ import json
 import math
 import uuid
 import shutil
+import time
+import signal
+from .panel_view import build_view, status_summary
 import rclpy
-from std_msgs.msg import String
+from std_msgs.msg import String, Bool
+from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
+from .map_pose import pose_vector, write_start, read_start, prepare_cloud, PosePicker
 from rclpy.time import Time
 from tf2_ros import Buffer, TransformListener
 from ament_index_python.packages import get_package_share_directory
@@ -30,59 +35,26 @@ class Panel:
         self.key_pub=self.node.create_publisher(String,'/cybergear/key',10)
         self.capture_frame='map';self.odom_session=None;self.sensor_mode=None
         self.last_status={}
+        self.mapping_start=None
+        self.active_map=None
+        self.match_pose=None;self.match_valid=False;self.match_valid_time=0
+        self.match_text='尚未尝试定位';self.match_requested=0
+        self.initial_pub=self.node.create_publisher(PoseWithCovarianceStamped,'/initialpose',10)
+        self.node.create_subscription(PoseStamped,'/gicp/pose',self.on_match_pose,10)
+        self.node.create_subscription(Bool,'/gicp/valid',self.on_match_valid,10)
+        self.node.create_subscription(String,'/gicp/status',self.on_match_status,10)
         self.node.create_subscription(String,'/cybergear/status',self.on_status,10)
         self.events = queue.Queue()
         self.busy = False
         self.mode = None
         self.session_dir = None
         self.procs = Processes(Path.home()/'rc2026_logs'/datetime.now().strftime('panel_%Y%m%d_%H%M%S_%f'))
-        root.title('RC2026 建图 / 采点 / CyberGear 自动运行')
-        root.geometry('1050x850')
         profile_path = self.config/'profile.yaml'
         profile = yaml.safe_load(profile_path.read_text()) if profile_path.exists() else {}
-        self.values = {}
-        form = ttk.Frame(root, padding=10); form.pack(fill='x')
-        fields = [('map_name','本次建图名称','field'),
-                  ('map','定位 PCD',profile.get('map_pcd') or ''),
-                  ('pose','当前 IMU 地图位姿 x y z roll pitch yaw',
-                   ' '.join(map(str,profile.get('initial_pose') or []))),
-                  ('port','串口设备','/dev/ttyUSB0'),
-                  ('plan','按键任务 YAML',str(self.config/'cybergear_plan.yaml')),
-                  ('field','采点文件',str(Path.home()/'rc2026_field/field.yaml'))]
-        for i, (key, label, value) in enumerate(fields):
-            ttk.Label(form,text=label).grid(row=i,column=0,sticky='w')
-            self.values[key] = tk.StringVar(value=value)
-            ttk.Entry(form,textvariable=self.values[key],width=78).grid(row=i,column=1,sticky='ew')
-            if key in ('map','plan'):
-                ttk.Button(form,text='选择文件',command=lambda k=key:self.choose(k)).grid(row=i,column=2)
-        form.columnconfigure(1,weight=1)
-        ttk.Label(root,text='已有 IP/外参/轮廓保留。先关闭在其他终端运行的雷达、定位和运动程序。').pack(anchor='w',padx=10)
-        bar = ttk.Frame(root,padding=10); bar.pack(fill='x')
-        actions = [('① 开始建图',self.mapping),('② 保存地图',self.save_map),
-                   ('③ 定位与采点',self.localize),('旧采点面板',self.capture),
-                   ('④ 自动运行模式',self.automatic),('开始任务',self.start_task),
-                   ('停止任务',self.stop_task),('停止本面板全部程序',self.stop_all)]
-        for i,(label,fn) in enumerate(actions):
-            ttk.Button(bar,text=label,command=lambda f=fn:self.dispatch(f)).grid(row=i//4,column=i%4,padx=4,pady=4,sticky='ew')
-        extra=ttk.Frame(root,padding=8);extra.pack(fill='x')
-        ttk.Button(extra,text='快速里程计（无需地图）',command=lambda:self.dispatch(self.quick_odometry)).pack(side='left')
-        ttk.Button(extra,text='场地 / 障碍编排与采点',command=self.open_course).pack(side='left',padx=4)
-        ttk.Button(extra,text='连接串口单动作调试',command=lambda:self.dispatch(self.debug_bridge)).pack(side='left',padx=4)
-        controls=ttk.Frame(root,padding=8);controls.pack(fill='x')
-        self.debug_key=tk.StringVar(value='9')
-        ttk.Combobox(controls,textvariable=self.debug_key,values=[str(k) for k in range(9,19)],width=5,state='readonly').pack(side='left')
-        ttk.Button(controls,text='发送模式键',command=lambda:self.manual_key(int(self.debug_key.get()))).pack(side='left')
-        for label,key in [('左转',1),('前进',2),('右转',3),('后退',4),('停止',5),('动作6',6),('动作7',7),('动作8',8)]:
-            ttk.Button(controls,text=label,command=lambda k=key:self.manual_key(k)).pack(side='left')
-        self.only_keys = tk.BooleanVar(value=False)
-        ttk.Checkbutton(root,text='只调按键 / 时序（自动运行模式不启动定位）',variable=self.only_keys).pack(anchor='w',padx=10)
-        self.position=tk.StringVar(value='位置：等待定位/里程计')
-        ttk.Label(root,textvariable=self.position).pack(fill='x',padx=10)
-        self.live = tk.StringVar(value='串口状态：尚未启动')
-        ttk.Label(root,textvariable=self.live,wraplength=920).pack(fill='x',padx=10)
-        self.state = tk.StringVar(value='待操作；配置目录：'+str(self.config))
-        ttk.Label(root,textvariable=self.state,wraplength=920).pack(fill='x',padx=10)
-        self.text = tk.Text(root,height=22,wrap='word'); self.text.pack(fill='both',expand=True,padx=10,pady=10)
+        self.status_received = None
+        self.close_requested = False
+        self.worker = None
+        build_view(self, profile)
         self.ensure_config()
         self.log('日志目录：'+str(self.procs.log_dir))
         root.protocol('WM_DELETE_WINDOW',self.close)
@@ -100,23 +72,43 @@ class Panel:
             self.log('正在完成上一操作，请稍候。'); return
         data={k:v.get().strip() for k,v in self.values.items()}
         data['only_keys']=self.only_keys.get()
-        self.busy=True; self.state.set('处理中：'+fn.__name__)
+        self.busy=True; self.state.set('正在处理，请稍候…')
         def worker():
             try:
                 result=fn(data)
                 self.events.put(('done',str(result or '操作完成')))
             except Exception as exc:self.events.put(('error',str(exc)))
-        threading.Thread(target=worker,daemon=True).start()
+        self.worker=threading.Thread(target=worker,daemon=True)
+        self.worker.start()
 
     def poll(self):
         while not self.events.empty():
             kind,text=self.events.get()
             if kind=='map':self.values['map'].set(text)
+            elif kind=='pose':
+                self.values['pose'].set(' '.join(f'{v:.6f}' for v in text))
+            elif kind=='cloud':
+                path,cloud,initial=text
+                if self.values['map'].get().strip()!=path:
+                    self.log('地图选择已改变，请重新打开预览。')
+                else:PosePicker(self.root,cloud,initial,lambda pose:self.apply_picked_pose(path,pose))
             elif kind=='close':self.node.destroy_node();self.root.destroy();return
             else:
                 self.busy=False; self.state.set(text); self.log(text)
-                if kind=='error':messagebox.showerror('操作失败',text)
+                if kind=='error' and not self.close_requested:messagebox.showerror('操作失败',text)
+        if self.close_requested and not self.busy:
+            self.close()
         rclpy.spin_once(self.node,timeout_sec=0)
+        age=None if self.status_received is None else time.monotonic()-self.status_received
+        title,hint,mode=status_summary(self.last_status,self.procs.alive('bridge'),age)
+        if self.sensor_mode!='localization' or not self.procs.alive('sensors'):
+            self.localization_state.set('定位：尚未运行地图定位')
+        elif self.match_pose is not None and time.monotonic()-self.match_valid_time>2:
+            self.localization_state.set('定位：反馈已过期，请检查雷达和定位进程')
+        else:self.localization_state.set('定位：'+self.match_text)
+        self.connection.set(title); self.status_hint.set(hint); self.robot_mode.set(mode)
+        task=self.last_status.get('task','no_plan') if self.procs.alive('bridge') and age is not None and age<=2 else 'unknown'
+        self.task_state.set({'no_plan':'未载入任务','idle':'待开始','running':'执行中','completed':'步骤已结束','stopped':'已停止','unknown':'等待状态'}.get(task,task))
         try:
             x,y,yaw=self.read_capture_pose()
             self.position.set(f'位置 [{self.capture_frame}]：x={x:.3f} m，y={y:.3f} m，yaw={math.degrees(yaw):.1f}°')
@@ -143,7 +135,9 @@ class Panel:
             return
         try:
             status=json.loads(msg.data)
+            if not isinstance(status,dict):return
             self.last_status=status
+            self.status_received=time.monotonic()
             self.live.set('就绪：'+str(status.get('ready'))+' 任务：'+str(status.get('task'))+
                           ' 障碍：'+str(status.get('obstacle',''))+' 步骤：'+str(status.get('step'))+' 动作：'+str(status.get('action',''))+' 回包：'+str(status.get('status')))
         except (ValueError,TypeError):
@@ -156,11 +150,17 @@ class Panel:
         self.procs.stop_all(); self.mode=None
         self.session_dir=Path.home()/'rc2026_maps'/(name+'_'+datetime.now().strftime('%Y%m%d_%H%M%S_%f'))
         self.session_dir.mkdir(parents=True)
+        self.mapping_start=None
         self.real('odometry'); self.mode='mapping'; self.odom_session=None; self.rviz(True)
         # Record the first real IMU pose; ask operator to remain still until completed.
         output=run_command(['ros2','topic','echo','/Odometry','nav_msgs/msg/Odometry','--once'],45)
+        messages=[item for item in yaml.safe_load_all(output) if item is not None]
+        if len(messages)!=1:raise ValueError('未收到唯一的建图起点位姿，请检查 /Odometry')
+        odom=messages[0]
+        self.mapping_start={'pose':pose_vector(odom['pose']['pose']),'frame':odom['header']['frame_id']}
         (self.session_dir/'mapping_start_odom.yaml').write_text(output)
-        return '建图起点已记录。现在用遥控器走场；完成后点“保存地图”。'
+        self.events.put(('pose',self.mapping_start['pose']))
+        return '建图起点已记录并填入位姿栏。现在可遥控走场；保存后若使用起点位姿定位，须回到同一位置和朝向。'
 
     def save_map(self,d):
         if self.mode!='mapping' or not self.procs.alive('sensors'):raise ValueError('请先开始建图并保持雷达运行')
@@ -168,9 +168,16 @@ class Panel:
                             '-p','output_dir:='+str(self.session_dir),'-p','timeout_sec:=45.0'],55)
         path=saved_path(output)
         self.events.put(('map',path))
+        start=getattr(self,'mapping_start',None)
+        if start:
+            frames=[line[6:].strip() for line in output.splitlines() if line.startswith('FRAME ')]
+            if frames!=[start['frame']]:
+                return 'PCD 已保存，但地图坐标系与起点记录不一致，未关联起点。请图上指定初始位姿。'
+            write_start(path,start['pose'],start['frame'])
         return '保存成功：'+path+'\n已自动填入定位地图栏。确认当前 IMU 地图位姿后再切到定位。'
 
     def prepare_localization(self,d):
+        load_profile(self.config,'odometry')
         pose=[float(v) for v in d['pose'].replace(',',' ').split()]
         backup=apply_localization(self.config,d['map'],pose)
         return backup
@@ -178,10 +185,84 @@ class Panel:
     def localize(self,d):
         if self.procs.alive('sensors') and self.mode=='localization':
             return '定位已运行；修改地图或初始位姿后请先停止全部程序再启动。'
-        self.procs.stop_all();self.mode=None
         backup=self.prepare_localization(d)
+        self.procs.stop_all();self.mode=None
+        self.active_map=str(Path(d['map']).expanduser().resolve())
+        self.reset_match()
         self.real('localization');self.mode='localization';self.capture_frame='map';self.rviz(False)
         return '定位已启动，请在 RViz 核对位置后打开采点面板。配置备份：'+str(backup)
+
+    def reset_match(self):
+        self.match_pose=None;self.match_valid=False;self.match_valid_time=0
+        self.match_requested=self.node.get_clock().now().nanoseconds*1e-9
+        self.match_text='等待新雷达数据与匹配结果'
+
+    def on_match_pose(self,msg):
+        stamp=msg.header.stamp.sec+msg.header.stamp.nanosec*1e-9
+        if self.sensor_mode=='localization' and msg.header.frame_id=='map' and stamp>self.match_requested:
+            self.match_pose=msg
+
+    def on_match_valid(self,msg):
+        self.match_valid=bool(msg.data);self.match_valid_time=time.monotonic()
+
+    def on_match_status(self,msg):
+        if self.sensor_mode=='localization':
+            self.match_text=msg.data.replace('ACCEPTED','匹配通过').replace('REJECTED','匹配未通过').replace('WAITING_FOR_SYNCHRONIZED_INPUT','等待雷达与里程计同步数据').replace('NOT_CONVERGED','尚未收敛').replace('STALE_INPUT','输入数据已过期')
+
+    def apply_picked_pose(self,path,pose):
+        if self.values['map'].get().strip()!=path:
+            raise ValueError('主面板已更换地图，请重新打开地图预览')
+        self.values['pose'].set(' '.join(f'{v:.6f}' for v in pose))
+        self.log('已填入地图点选位姿；点击“尝试定位”，在 RViz 核对点云重合后再使用结果。')
+
+    def preview_map(self,d):
+        if not d['map']:raise ValueError('请先选择旧地图 PCD')
+        cloud=prepare_cloud(d['map'])
+        try:initial=read_start(d['map'])
+        except ValueError:initial=None
+        if d['pose']:
+            from .profile import vector
+            initial=vector([float(v) for v in d['pose'].replace(',',' ').split()],6,'初始位姿')
+        self.events.put(('cloud',(d['map'],cloud,initial)))
+        return '地图已打开：点击位置并拖动箭头确定朝向。'
+
+    def use_map_start(self,d):
+        if not d['map']:raise ValueError('请先选择对应的 PCD 地图')
+        pose=read_start(d['map']);self.events.put(('pose',pose))
+        return '已填入这张地图的建图起点。请把机器人放回当时同一位置与朝向，再尝试定位。'
+
+    def try_localization(self,d):
+        if self.procs.alive('bridge'):
+            raise ValueError('请先停止任务并停止本面板全部程序，再重新定位。')
+        if self.sensor_mode=='localization' and self.procs.alive('sensors'):
+            if str(Path(d['map']).expanduser().resolve())!=self.active_map:
+                raise ValueError('定位正在使用另一张地图，请先停止建图 / 定位，再重试。')
+            from .profile import vector
+            xyzrpy=vector([float(v) for v in d['pose'].replace(',',' ').split()],6,'初始位姿')
+            msg=PoseWithCovarianceStamped();msg.header.frame_id='map';msg.header.stamp=self.node.get_clock().now().to_msg()
+            msg.pose.pose.position.x,msg.pose.pose.position.y,msg.pose.pose.position.z=xyzrpy[:3]
+            r,p,y=(v/2 for v in xyzrpy[3:]);cr,sr=math.cos(r),math.sin(r);cp,sp=math.cos(p),math.sin(p);cy,sy=math.cos(y),math.sin(y)
+            q=msg.pose.pose.orientation
+            q.x=sr*cp*cy-cr*sp*sy;q.y=cr*sp*cy+sr*cp*sy;q.z=cr*cp*sy-sr*sp*cy;q.w=cr*cp*cy+sr*sp*sy
+            self.reset_match();self.initial_pub.publish(msg)
+            return '已发送新初始位姿，等待匹配；请在 RViz 检查点云是否重合。'
+        return self.localize(d)
+
+    def use_match(self,d):
+        msg=self.match_pose
+        if self.sensor_mode!='localization' or not self.procs.alive('sensors') or msg is None:
+            raise ValueError('尚未获得本次定位结果，请先尝试定位')
+        stamp=msg.header.stamp.sec+msg.header.stamp.nanosec*1e-9
+        age=self.node.get_clock().now().nanoseconds*1e-9-stamp
+        if not self.match_valid or time.monotonic()-self.match_valid_time>2 or not 0<=age<=2:
+            raise ValueError('定位结果未通过或已过期，请重新匹配')
+        if str(Path(d['map']).expanduser().resolve())!=self.active_map:
+            raise ValueError('所选地图与正在定位的地图不一致')
+        p=msg.pose.position;q=msg.pose.orientation
+        pose=pose_vector(dict(position=dict(x=p.x,y=p.y,z=p.z),orientation=dict(x=q.x,y=q.y,z=q.z,w=q.w)))
+        backup=apply_localization(self.config,d['map'],pose)
+        self.events.put(('pose',pose))
+        return '已保存当前匹配位姿，定位保持运行，可进入采点或任务页面。配置备份：'+str(backup)
 
     def capture(self,d):
         if self.mode!='localization' or not self.procs.alive('sensors'):raise ValueError('先启动“定位与采点”模式')
@@ -235,7 +316,7 @@ class Panel:
     def launch_bridge(self,d,plan=''):
         self.ensure_config()
         if not d['port']:raise ValueError('请填写串口设备')
-        self.procs.stop('bridge');self.last_status={}
+        self.procs.stop('bridge');self.last_status={};self.status_received=None
         self.procs.start('bridge',['ros2','launch','go2_onboard_bringup','cybergear_auto.launch.py',
             'port:='+d['port'],'enable_motion:=true','params_file:='+str(self.config/'cybergear.yaml'),'plan_file:='+str(plan)])
         self.mode='auto'
@@ -276,8 +357,24 @@ class Panel:
         return run_command(['ros2','service','call','/cybergear/stop','std_srvs/srv/Trigger','{}'],8)
 
     def stop_all(self,d):
-        self.procs.stop_all();self.mode=None;self.odom_session=None
+        self.procs.stop_all();self.mode=None;self.sensor_mode=None;self.odom_session=None
+        self.last_status={};self.status_received=None
         return '本面板启动的程序已停止；未终止其他终端的程序。'
+
+    def stop_sensors(self,d):
+        if self.procs.alive('bridge'):
+            raise ValueError('串口 / 自动任务仍在运行。请先停止任务，再点“停止本面板全部程序”；不能在任务中切断定位。')
+        for name in ('capture','rviz','sensors'):
+            self.procs.stop(name)
+        self.mode=None; self.sensor_mode=None; self.odom_session=None
+        return '建图 / 定位已停止，面板保留。可重新开始建图；旧地图文件未删除。'
+
+    def request_close(self):
+        self.close_requested=True
+        if self.busy:
+            self.state.set('退出已请求，等待当前操作结束后清理后台程序…')
+        else:
+            self.close()
 
     def close(self):
         if self.busy:
@@ -285,7 +382,8 @@ class Panel:
         self.busy=True
         def worker():
             self.procs.stop_all();self.events.put(('close',''))
-        threading.Thread(target=worker,daemon=True).start()
+        self.worker=threading.Thread(target=worker,daemon=True)
+        self.worker.start()
 
 
 def main():
@@ -293,7 +391,16 @@ def main():
     parser.add_argument('--config-dir',default=str(Path.home()/'.config/rc2026'))
     args=parser.parse_args()
     rclpy.init(args=[])
+    panel=None
+    previous={}
     try:
-        root=tk.Tk();Panel(root,args.config_dir);root.mainloop()
+        root=tk.Tk();panel=Panel(root,args.config_dir)
+        for sig in (signal.SIGINT,signal.SIGTERM):
+            previous[sig]=signal.signal(sig,lambda *_:root.after(0,panel.request_close))
+        root.mainloop()
     finally:
+        if panel is not None:
+            if panel.worker is not None:panel.worker.join()
+            panel.procs.stop_all()
+        for sig,handler in previous.items():signal.signal(sig,handler)
         if rclpy.ok():rclpy.shutdown()
